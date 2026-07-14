@@ -3,7 +3,7 @@
 Laboratorio de investigación cuantitativa: descubrimiento masivo de estrategias mediante
 backtesting, optimización y validación robusta. Ejecución 100% local sobre Docker.
 
-> **Estado:** Fase 4 — Optimización masiva (Optuna + workers distribuidos sobre Redis).
+> **Estado:** Fase 5 — Validación robusta (Walk-Forward, Monte Carlo, stress testing).
 
 ## Stack
 
@@ -74,6 +74,23 @@ los rangos que faltan. Repetir el sync solo trae velas nuevas.
   Escala con: `docker compose up -d --scale worker=4`. Estado en `GET /api/v1/workers`.
 - Cada trial se persiste al completarse: progreso y ranking en vivo en el dashboard.
 
+## Validación robusta
+
+Nunca aceptes una estrategia solo porque ganó el backtest. Panel **Validation**
+(o `POST /api/v1/validations`), tres métodos que corren en los workers:
+
+- **Walk-Forward**: optimiza en cada ventana in-sample y evalúa los mejores
+  parámetros en la ventana out-of-sample siguiente (rodante o anclado).
+  La *eficiencia WF* (score OOS/IS) cerca de 1 indica robustez; cerca de 0,
+  curve-fitting. Config: `n_folds`, `train_ratio`, `n_trials`, `optimizer`,
+  `objective`, `anchored`, `seed`.
+- **Monte Carlo**: remuestrea los retornos por trade (`resample` bootstrap o
+  `shuffle` permutación) y reporta percentiles de retorno final y drawdown,
+  P(pérdida) y P(ruina, DD>50%). Config: `n_runs`, `method`, `seed`.
+- **Stress**: re-ejecuta bajo escenarios hostiles — spread ×2/×3, comisión,
+  slippage, retraso aleatorio de señales de 1-3 barras y el combo de todo —
+  y mide la degradación frente al baseline. Config: `scenarios` (opcional).
+
 ## Arquitectura (backend)
 
 ```
@@ -97,7 +114,7 @@ los módulos se comunican por eventos de dominio a través del `EventBus`.
 | 2 ✅ | Datos: adaptador OANDA, descarga histórica idempotente → Parquet + catálogo en PostgreSQL |
 | 3 ✅ | Estrategias (plugins auto-descubiertos) + motor de backtesting |
 | 4 ✅ | Optimización masiva (Optuna/GA/Nevergrad/Bayesian) con función objetivo configurable |
-| 5 | Validación: Walk-Forward, Monte Carlo, stress testing, costes realistas |
+| 5 ✅ | Validación: Walk-Forward, Monte Carlo, stress testing, costes realistas |
 | 6 | ML (clasificadores/regresores) y RL (Gymnasium + SB3) |
 | 7 | Dashboard completo: heatmaps, equity, drawdown, ranking, logs |
 | 8 | Administración (auth, roles, API keys) y ejecución paper/live vía OANDA |

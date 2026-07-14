@@ -126,6 +126,29 @@ def test_position_reversal_long_to_short_is_supported() -> None:
     assert result.metrics.trades >= 2
 
 
+def test_trade_returns_are_exposed_for_monte_carlo() -> None:
+    data = trending_data()
+    engine = VectorbtBacktestEngine()
+    result = engine.run(
+        data,
+        make_signals(data, entry_at=10, exit_at=190),
+        OrderPlan(),
+        CostModel(use_spread=False),
+        Timeframe.H1,
+    )
+    assert len(result.trade_returns) == result.metrics.trades == 1
+    assert result.trade_returns[0] > 0  # profitable long in an uptrend
+
+
+def test_spread_mult_scales_the_spread_cost() -> None:
+    data = trending_data()
+    signals = make_signals(data, entry_at=10, exit_at=190)
+    engine = VectorbtBacktestEngine()
+    normal = engine.run(data, signals, OrderPlan(), CostModel(spread_mult=1.0), Timeframe.H1)
+    stressed = engine.run(data, signals, OrderPlan(), CostModel(spread_mult=5.0), Timeframe.H1)
+    assert stressed.metrics.total_return < normal.metrics.total_return
+
+
 def test_no_signals_produce_flat_metrics() -> None:
     data = make_market_data(120)
     engine = VectorbtBacktestEngine()

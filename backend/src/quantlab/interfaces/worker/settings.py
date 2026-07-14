@@ -15,6 +15,7 @@ from quantlab.config import Settings
 from quantlab.container import Container
 
 OPTIMIZATION_JOB = "run_optimization"
+VALIDATION_JOB = "run_validation"
 HEALTH_CHECK_KEY = "arq:quantlab:health-check"
 QUEUE_NAME = "arq:quantlab"
 
@@ -44,10 +45,17 @@ async def run_optimization(ctx: dict[str, Any], study_id: str) -> str:
     return f"{study.strategy_id} {study.symbol} {study.timeframe}: {study.status}"
 
 
+async def run_validation(ctx: dict[str, Any], run_id: str) -> str:
+    """Execute one validation run (walk-forward, Monte Carlo or stress)."""
+    container: Container = ctx["container"]
+    run = await container.validation_service.run(uuid.UUID(run_id))
+    return f"{run.kind} {run.strategy_id} {run.symbol} {run.timeframe}: {run.status}"
+
+
 class WorkerSettings:
     """arq entrypoint."""
 
-    functions: ClassVar[list[Callable[..., Awaitable[str]]]] = [run_optimization]
+    functions: ClassVar[list[Callable[..., Awaitable[str]]]] = [run_optimization, run_validation]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = redis_settings()

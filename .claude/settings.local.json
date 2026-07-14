@@ -38,7 +38,9 @@
       "Bash(python3 -c \"import json,sys; s=json.load\\(sys.stdin\\); print\\(s['status'], s['trials_completed'], '/', s['n_trials'], 'best:', s['best_score']\\)\")",
       "Bash(curl -s \"http://localhost:8080/api/v1/optimizations/b2f56611-0001-4915-b28a-1ae4d7279248/trials?limit=3\")",
       "Bash(python3 -c \"import json,sys; print\\('sync relanzado:', json.load\\(sys.stdin\\)['pairs'], 'pares'\\)\")",
-      "Bash(git commit -m 'Phase 4: massive optimization — Optuna + configurable objective + Redis workers *)"
+      "Bash(git commit -m 'Phase 4: massive optimization — Optuna + configurable objective + Redis workers *)",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/datasets/sync -H 'Content-Type: application/json' -d '{\"symbols\":[\"US30\"],\"timeframes\":[\"M1\"]}')",
+      "Bash(git commit -m 'Phase 5: robust validation — walk-forward, Monte Carlo, stress testing *)"
     ]
   }
 }

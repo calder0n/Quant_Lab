@@ -24,10 +24,12 @@ from quantlab.application.ports import (
     DatasetRepository,
     MarketDataProvider,
     OptimizationRepository,
+    ValidationRepository,
 )
 from quantlab.application.services.backtesting import BacktestService
 from quantlab.application.services.data_ingestion import DataIngestionService
 from quantlab.application.services.optimization import OptimizationService
+from quantlab.application.services.validation import ValidationService
 from quantlab.config import Settings
 from quantlab.domain.broker import OANDA, BrokerCredentials
 from quantlab.infrastructure.brokers.oanda.client import OandaClient
@@ -41,6 +43,7 @@ from quantlab.infrastructure.db.repositories.dataset import SqlAlchemyDatasetRep
 from quantlab.infrastructure.db.repositories.optimization import (
     SqlAlchemyOptimizationRepository,
 )
+from quantlab.infrastructure.db.repositories.validation import SqlAlchemyValidationRepository
 from quantlab.infrastructure.db.session import create_engine, create_session_factory
 from quantlab.strategies.registry import StrategyRegistry
 
@@ -67,6 +70,7 @@ class Container:
         self._backtest_engine: BacktestEngine | None = None
         self._backtest_service: BacktestService | None = None
         self._optimization_service: OptimizationService | None = None
+        self._validation_service: ValidationService | None = None
         self._arq_pool: ArqRedis | None = None
 
     @property
@@ -209,6 +213,35 @@ class Container:
                 optimizers={"optuna": OptunaOptimizer, "random": RandomSearchOptimizer},
             )
         return self._optimization_service
+
+    @asynccontextmanager
+    async def validation_repository(self) -> AsyncIterator[ValidationRepository]:
+        """Open a transactional scope over the validation store."""
+        async with self.session_factory() as session, session.begin():
+            yield SqlAlchemyValidationRepository(session)
+
+    @property
+    def validation_service(self) -> ValidationService:
+        if self._validation_service is None:
+            from quantlab.infrastructure.optimizers.optuna_optimizer import OptunaOptimizer
+            from quantlab.infrastructure.optimizers.random_search import RandomSearchOptimizer
+
+            self._validation_service = ValidationService(
+                store=self.candle_store,
+                registry=self.strategy_registry,
+                engine=self.backtest_engine,
+                repositories=self.validation_repository,
+                event_bus=self.event_bus,
+                optimizers={"optuna": OptunaOptimizer, "random": RandomSearchOptimizer},
+            )
+        return self._validation_service
+
+    async def enqueue_validation(self, run_id: uuid.UUID) -> None:
+        """Queue one validation run for execution by a worker."""
+        from quantlab.interfaces.worker.settings import QUEUE_NAME, VALIDATION_JOB
+
+        pool = await self.job_queue()
+        await pool.enqueue_job(VALIDATION_JOB, str(run_id), _queue_name=QUEUE_NAME)
 
     async def job_queue(self) -> "ArqRedis":
         """Redis-backed job queue (arq) used to dispatch work to workers."""

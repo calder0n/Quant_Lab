@@ -49,7 +49,8 @@ class VectorbtBacktestEngine(BacktestEngine):
     ) -> BacktestResult:
         slippage = pd.Series(costs.slippage_pct, index=data.index)
         if costs.use_spread and "spread" in data.columns:
-            slippage = slippage + (data["spread"] / (2.0 * data["close"])).fillna(0.0)
+            half_spread = (data["spread"] / (2.0 * data["close"])).fillna(0.0)
+            slippage = slippage + half_spread * costs.spread_mult
 
         portfolio = vbt.Portfolio.from_signals(
             close=data["close"],
@@ -71,6 +72,7 @@ class VectorbtBacktestEngine(BacktestEngine):
         return BacktestResult(
             metrics=self._metrics(portfolio),
             equity=self._equity(portfolio),
+            trade_returns=self._trade_returns(portfolio),
         )
 
     def _metrics(self, portfolio: Any) -> BacktestMetrics:
@@ -100,6 +102,13 @@ class VectorbtBacktestEngine(BacktestEngine):
             avg_trade_return=avg_trade_return,
             trades=trade_count,
         )
+
+    @staticmethod
+    def _trade_returns(portfolio: Any) -> list[float]:
+        trades = portfolio.trades
+        if int(trades.count()) == 0:
+            return []
+        return [float(value) for value in trades.returns.values]
 
     @staticmethod
     def _equity(portfolio: Any) -> pd.Series:

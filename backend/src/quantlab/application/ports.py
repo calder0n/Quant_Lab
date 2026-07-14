@@ -18,6 +18,7 @@ from quantlab.domain.broker import BrokerCredentials
 from quantlab.domain.datasets import Dataset
 from quantlab.domain.market import Symbol, Timeframe
 from quantlab.domain.optimization import OptimizationStudy, OptimizationTrial
+from quantlab.domain.validation import ValidationRun
 from quantlab.strategies.base import ParameterSpec, ParamValue
 
 
@@ -131,6 +132,22 @@ class OptimizationRepository(ABC):
     @abstractmethod
     async def top_trials(self, study_id: uuid.UUID, limit: int = 10) -> list[OptimizationTrial]:
         """Best trials of a study, ranked by score descending."""
+
+
+class ValidationRepository(ABC):
+    """Persistence port for validation runs (walk-forward, Monte Carlo, stress)."""
+
+    @abstractmethod
+    async def create(self, run: ValidationRun) -> ValidationRun: ...
+
+    @abstractmethod
+    async def get(self, run_id: uuid.UUID) -> ValidationRun | None: ...
+
+    @abstractmethod
+    async def list_all(self) -> list[ValidationRun]: ...
+
+    @abstractmethod
+    async def update(self, run: ValidationRun) -> ValidationRun: ...
 
 
 class BrokerSettingsRepository(ABC):

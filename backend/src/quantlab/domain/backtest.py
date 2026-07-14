@@ -10,13 +10,15 @@ class CostModel:
     """Trading friction applied by the backtest engine.
 
     ``use_spread`` charges half the stored real spread per side (the candles
-    are mid prices). ``commission_pct`` and ``slippage_pct`` are fractions of
-    notional per side (0.0002 = 2 bps).
+    are mid prices); ``spread_mult`` scales it for stress scenarios.
+    ``commission_pct`` and ``slippage_pct`` are fractions of notional per side
+    (0.0002 = 2 bps).
     """
 
     commission_pct: float = 0.0
     slippage_pct: float = 0.0
     use_spread: bool = True
+    spread_mult: float = 1.0
 
 
 @dataclass
@@ -53,9 +55,14 @@ class BacktestMetrics:
 
 @dataclass
 class BacktestResult:
-    """Outcome of one strategy execution over one dataset."""
+    """Outcome of one strategy execution over one dataset.
+
+    ``trade_returns`` holds the net return fraction of each closed trade in
+    chronological order; Monte Carlo validation resamples this sequence.
+    """
 
     metrics: BacktestMetrics
     equity: pd.Series
     fitness: float = 0.0
     params: dict[str, float | int | bool | str] = field(default_factory=dict)
+    trade_returns: list[float] = field(default_factory=list)

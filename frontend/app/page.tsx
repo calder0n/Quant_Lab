@@ -7,6 +7,7 @@ import BrokerSettingsPanel from "./components/BrokerSettingsPanel";
 import DatasetsPanel from "./components/DatasetsPanel";
 import OptimizationsPanel from "./components/OptimizationsPanel";
 import StrategiesPanel from "./components/StrategiesPanel";
+import ValidationsPanel from "./components/ValidationsPanel";
 
 type ComponentStatus = {
   status: "ok" | "error";
@@ -150,6 +151,7 @@ export default function Home() {
       <DatasetsPanel />
       <StrategiesPanel />
       <OptimizationsPanel />
+      <ValidationsPanel />
       <BacktestPanel />
     </main>
   );

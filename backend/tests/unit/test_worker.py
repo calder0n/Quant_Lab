@@ -6,6 +6,7 @@ from quantlab.config import Settings
 from quantlab.domain.market import Symbol, Timeframe
 from quantlab.domain.objective import ObjectiveConfig
 from quantlab.domain.optimization import OptimizationStudy, StudyStatus
+from quantlab.domain.validation import ValidationKind, ValidationRun
 from quantlab.interfaces.worker import settings as worker_settings
 
 
@@ -27,9 +28,26 @@ class FakeService:
         )
 
 
+class FakeValidationService:
+    def __init__(self) -> None:
+        self.calls: list[uuid.UUID] = []
+
+    async def run(self, run_id: uuid.UUID) -> ValidationRun:
+        self.calls.append(run_id)
+        return ValidationRun(
+            kind=ValidationKind.MONTE_CARLO,
+            strategy_id="rsi",
+            symbol=Symbol.EURUSD,
+            timeframe=Timeframe.H1,
+            status=StudyStatus.COMPLETED,
+            id=run_id,
+        )
+
+
 class FakeContainer:
     def __init__(self) -> None:
         self.optimization_service = FakeService()
+        self.validation_service = FakeValidationService()
         self.closed = False
 
     async def aclose(self) -> None:
@@ -60,6 +78,18 @@ def test_redis_settings_come_from_app_settings() -> None:
     assert redis.database == 2
 
 
+async def test_run_validation_job_delegates_to_the_service() -> None:
+    container = FakeContainer()
+    ctx: dict[str, object] = {"container": container}
+    run_id = uuid.uuid4()
+    summary = await worker_settings.run_validation(ctx, str(run_id))
+    assert container.validation_service.calls == [run_id]
+    assert "completed" in summary
+
+
 def test_worker_settings_run_one_job_at_a_time() -> None:
     assert worker_settings.WorkerSettings.max_jobs == 1
-    assert worker_settings.WorkerSettings.functions == [worker_settings.run_optimization]
+    assert worker_settings.WorkerSettings.functions == [
+        worker_settings.run_optimization,
+        worker_settings.run_validation,
+    ]
