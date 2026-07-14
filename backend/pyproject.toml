@@ -22,6 +22,14 @@ dependencies = [
     "vectorbt>=0.27",
     "optuna>=4.0",
     "arq>=0.26",
+    "scikit-learn>=1.5",
+    "xgboost>=2.1",
+    "lightgbm>=4.5",
+    "catboost>=1.2.7",
+    "torch>=2.4",
+    "joblib>=1.4",
+    "gymnasium>=1.0",
+    "stable-baselines3>=2.4",
 ]
 
 [project.optional-dependencies]
@@ -74,7 +82,17 @@ packages = ["quantlab"]
 exclude = ["alembic/"]
 
 [[tool.mypy.overrides]]
-module = ["vectorbt.*", "numba.*"]
+module = [
+    "vectorbt.*",
+    "numba.*",
+    "xgboost.*",
+    "lightgbm.*",
+    "catboost.*",
+    "sklearn.*",
+    "joblib.*",
+    "gymnasium.*",
+    "stable_baselines3.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

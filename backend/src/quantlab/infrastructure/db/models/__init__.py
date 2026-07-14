@@ -2,6 +2,7 @@
 
 from quantlab.infrastructure.db.models.broker_settings import BrokerSettingsRecord
 from quantlab.infrastructure.db.models.dataset import DatasetRecord
+from quantlab.infrastructure.db.models.ml import MlModelRecord
 from quantlab.infrastructure.db.models.optimization import (
     OptimizationStudyRecord,
     OptimizationTrialRecord,
@@ -11,6 +12,7 @@ from quantlab.infrastructure.db.models.validation import ValidationRunRecord
 __all__ = [
     "BrokerSettingsRecord",
     "DatasetRecord",
+    "MlModelRecord",
     "OptimizationStudyRecord",
     "OptimizationTrialRecord",
     "ValidationRunRecord",

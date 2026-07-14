@@ -32,6 +32,7 @@ services:
 
   api:
     build: ./backend
+    image: quantlab-backend
     env_file:
       - path: .env
         required: false
@@ -65,7 +66,9 @@ services:
       ]
 
   worker:
-    build: ./backend
+    # Same image as the API (built once by the api service): a worker running
+    # different code/dependencies than the API is a deployment bug.
+    image: quantlab-backend
     env_file:
       - path: .env
         required: false

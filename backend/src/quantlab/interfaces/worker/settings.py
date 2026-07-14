@@ -16,6 +16,7 @@ from quantlab.container import Container
 
 OPTIMIZATION_JOB = "run_optimization"
 VALIDATION_JOB = "run_validation"
+TRAINING_JOB = "train_model"
 HEALTH_CHECK_KEY = "arq:quantlab:health-check"
 QUEUE_NAME = "arq:quantlab"
 
@@ -52,10 +53,21 @@ async def run_validation(ctx: dict[str, Any], run_id: str) -> str:
     return f"{run.kind} {run.strategy_id} {run.symbol} {run.timeframe}: {run.status}"
 
 
+async def train_model(ctx: dict[str, Any], model_id: str) -> str:
+    """Train one ML model or RL policy."""
+    container: Container = ctx["container"]
+    model = await container.ml_service.train(uuid.UUID(model_id))
+    return f"{model.kind} {model.algorithm} {model.target} {model.symbol}: {model.status}"
+
+
 class WorkerSettings:
     """arq entrypoint."""
 
-    functions: ClassVar[list[Callable[..., Awaitable[str]]]] = [run_optimization, run_validation]
+    functions: ClassVar[list[Callable[..., Awaitable[str]]]] = [
+        run_optimization,
+        run_validation,
+        train_model,
+    ]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = redis_settings()

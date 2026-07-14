@@ -17,6 +17,7 @@ from quantlab.domain.backtest import BacktestResult, CostModel, OrderPlan
 from quantlab.domain.broker import BrokerCredentials
 from quantlab.domain.datasets import Dataset
 from quantlab.domain.market import Symbol, Timeframe
+from quantlab.domain.ml import MlModel
 from quantlab.domain.optimization import OptimizationStudy, OptimizationTrial
 from quantlab.domain.validation import ValidationRun
 from quantlab.strategies.base import ParameterSpec, ParamValue
@@ -148,6 +149,22 @@ class ValidationRepository(ABC):
 
     @abstractmethod
     async def update(self, run: ValidationRun) -> ValidationRun: ...
+
+
+class MlModelRepository(ABC):
+    """Persistence port for the ML/RL model registry."""
+
+    @abstractmethod
+    async def create(self, model: MlModel) -> MlModel: ...
+
+    @abstractmethod
+    async def get(self, model_id: uuid.UUID) -> MlModel | None: ...
+
+    @abstractmethod
+    async def list_all(self) -> list[MlModel]: ...
+
+    @abstractmethod
+    async def update(self, model: MlModel) -> MlModel: ...
 
 
 class BrokerSettingsRepository(ABC):

@@ -23,11 +23,13 @@ from quantlab.application.ports import (
     CandleStore,
     DatasetRepository,
     MarketDataProvider,
+    MlModelRepository,
     OptimizationRepository,
     ValidationRepository,
 )
 from quantlab.application.services.backtesting import BacktestService
 from quantlab.application.services.data_ingestion import DataIngestionService
+from quantlab.application.services.ml import MlService
 from quantlab.application.services.optimization import OptimizationService
 from quantlab.application.services.validation import ValidationService
 from quantlab.config import Settings
@@ -40,6 +42,7 @@ from quantlab.infrastructure.db.repositories.broker_settings import (
     SqlAlchemyBrokerSettingsRepository,
 )
 from quantlab.infrastructure.db.repositories.dataset import SqlAlchemyDatasetRepository
+from quantlab.infrastructure.db.repositories.ml import SqlAlchemyMlModelRepository
 from quantlab.infrastructure.db.repositories.optimization import (
     SqlAlchemyOptimizationRepository,
 )
@@ -71,6 +74,7 @@ class Container:
         self._backtest_service: BacktestService | None = None
         self._optimization_service: OptimizationService | None = None
         self._validation_service: ValidationService | None = None
+        self._ml_service: MlService | None = None
         self._arq_pool: ArqRedis | None = None
 
     @property
@@ -235,6 +239,30 @@ class Container:
                 optimizers={"optuna": OptunaOptimizer, "random": RandomSearchOptimizer},
             )
         return self._validation_service
+
+    @asynccontextmanager
+    async def ml_model_repository(self) -> AsyncIterator[MlModelRepository]:
+        """Open a transactional scope over the model registry."""
+        async with self.session_factory() as session, session.begin():
+            yield SqlAlchemyMlModelRepository(session)
+
+    @property
+    def ml_service(self) -> MlService:
+        if self._ml_service is None:
+            self._ml_service = MlService(
+                store=self.candle_store,
+                repositories=self.ml_model_repository,
+                event_bus=self.event_bus,
+                artifacts_dir=self._settings.data_dir / "models",
+            )
+        return self._ml_service
+
+    async def enqueue_training(self, model_id: uuid.UUID) -> None:
+        """Queue one model training for execution by a worker."""
+        from quantlab.interfaces.worker.settings import QUEUE_NAME, TRAINING_JOB
+
+        pool = await self.job_queue()
+        await pool.enqueue_job(TRAINING_JOB, str(model_id), _queue_name=QUEUE_NAME)
 
     async def enqueue_validation(self, run_id: uuid.UUID) -> None:
         """Queue one validation run for execution by a worker."""

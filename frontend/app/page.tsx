@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import BacktestPanel from "./components/BacktestPanel";
 import BrokerSettingsPanel from "./components/BrokerSettingsPanel";
 import DatasetsPanel from "./components/DatasetsPanel";
+import MlPanel from "./components/MlPanel";
 import OptimizationsPanel from "./components/OptimizationsPanel";
 import StrategiesPanel from "./components/StrategiesPanel";
 import ValidationsPanel from "./components/ValidationsPanel";
@@ -152,6 +153,7 @@ export default function Home() {
       <StrategiesPanel />
       <OptimizationsPanel />
       <ValidationsPanel />
+      <MlPanel />
       <BacktestPanel />
     </main>
   );

@@ -3,7 +3,7 @@
 Laboratorio de investigación cuantitativa: descubrimiento masivo de estrategias mediante
 backtesting, optimización y validación robusta. Ejecución 100% local sobre Docker.
 
-> **Estado:** Fase 5 — Validación robusta (Walk-Forward, Monte Carlo, stress testing).
+> **Estado:** Fase 6 — Machine Learning (XGBoost/LightGBM/CatBoost/PyTorch) + RL (Gymnasium + SB3).
 
 ## Stack
 
@@ -91,6 +91,21 @@ Nunca aceptes una estrategia solo porque ganó el backtest. Panel **Validation**
   slippage, retraso aleatorio de señales de 1-3 barras y el combo de todo —
   y mide la degradación frente al baseline. Config: `scenarios` (opcional).
 
+## Machine Learning y RL
+
+Panel **Machine Learning** (o `POST /api/v1/ml/models`); entrena en los workers:
+
+- **ML supervisado** (`kind: ml`): features causales + etiquetado triple-barrera
+  (SL/TP a múltiplos de ATR, horizonte de N barras). Objetivos: `win` (P de TP
+  primero), `sl_hit`, `tp_hit`, `expected_move` (regresión). Algoritmos:
+  `xgboost`, `lightgbm`, `catboost`, `torch_mlp`. Split cronológico 70/15/15,
+  métricas sobre el test final (AUC vs base rate / R²), importancia de features,
+  artefacto en `/data/models/`.
+- **RL** (`kind: rl`, algoritmo `ppo`): entorno Gymnasium con estados =
+  features + posición, acciones = comprar/vender/cerrar/esperar, reward =
+  retorno de la posición − costes. Entrena en el 80% inicial y evalúa la
+  política determinista en el 20% final (held-out).
+
 ## Arquitectura (backend)
 
 ```
@@ -115,6 +130,6 @@ los módulos se comunican por eventos de dominio a través del `EventBus`.
 | 3 ✅ | Estrategias (plugins auto-descubiertos) + motor de backtesting |
 | 4 ✅ | Optimización masiva (Optuna/GA/Nevergrad/Bayesian) con función objetivo configurable |
 | 5 ✅ | Validación: Walk-Forward, Monte Carlo, stress testing, costes realistas |
-| 6 | ML (clasificadores/regresores) y RL (Gymnasium + SB3) |
+| 6 ✅ | ML (clasificadores/regresores) y RL (Gymnasium + SB3) |
 | 7 | Dashboard completo: heatmaps, equity, drawdown, ranking, logs |
 | 8 | Administración (auth, roles, API keys) y ejecución paper/live vía OANDA |
