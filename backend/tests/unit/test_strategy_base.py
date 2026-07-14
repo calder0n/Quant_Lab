@@ -81,22 +81,18 @@ def test_default_orders_scale_with_atr_params() -> None:
     assert tight_plan.sl_pct is not None and wide_plan.sl_pct is not None
     assert (wide_plan.sl_pct.iloc[50:] > tight_plan.sl_pct.iloc[50:]).all()
     assert wide_plan.trailing is False
-    assert DummyStrategy(use_trailing=True).generate_orders(
-        data, tight.generate_signals(data)
-    ).trailing
+    assert (
+        DummyStrategy(use_trailing=True)
+        .generate_orders(data, tight.generate_signals(data))
+        .trailing
+    )
 
 
 def test_default_fitness_behaviour() -> None:
     strategy = DummyStrategy()
     assert strategy.fitness(BacktestMetrics(trades=0)) == -1.0
-    good = BacktestMetrics(
-        sharpe=2.0, sortino=3.0, calmar=2.0, profit_factor=2.0, trades=100
-    )
-    bad = BacktestMetrics(
-        sharpe=-1.0, sortino=-1.0, calmar=-1.0, profit_factor=0.5, trades=100
-    )
+    good = BacktestMetrics(sharpe=2.0, sortino=3.0, calmar=2.0, profit_factor=2.0, trades=100)
+    bad = BacktestMetrics(sharpe=-1.0, sortino=-1.0, calmar=-1.0, profit_factor=0.5, trades=100)
     assert strategy.fitness(good) > strategy.fitness(bad)
-    few_trades = BacktestMetrics(
-        sharpe=2.0, sortino=3.0, calmar=2.0, profit_factor=2.0, trades=3
-    )
+    few_trades = BacktestMetrics(sharpe=2.0, sortino=3.0, calmar=2.0, profit_factor=2.0, trades=3)
     assert strategy.fitness(good) > strategy.fitness(few_trades)

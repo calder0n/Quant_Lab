@@ -92,7 +92,8 @@ export default function DatasetsPanel() {
           <div className="p-6 text-sm text-slate-500">Loading…</div>
         ) : datasets.length === 0 ? (
           <div className="p-6 text-sm text-slate-500">
-            No datasets yet. Configure QL_OANDA_API_TOKEN and press “Sync history”.
+            No datasets yet. Configure your OANDA credentials in Broker settings and press
+            “Sync history”.
           </div>
         ) : (
           <table className="w-full text-left text-sm">

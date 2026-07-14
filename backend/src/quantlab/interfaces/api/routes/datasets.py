@@ -67,14 +67,19 @@ async def sync_datasets(
     request: SyncRequest, background: BackgroundTasks, container: ContainerDep
 ) -> SyncScheduled:
     """Schedule an idempotent background download of the missing history."""
-    if not container.settings.oanda_api_token:
+    credentials = await container.oanda_credentials()
+    if not credentials.configured:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="OANDA API token not configured (set QL_OANDA_API_TOKEN).",
+            detail=(
+                "OANDA credentials not configured. Set them in Broker settings "
+                "(or via QL_OANDA_API_TOKEN)."
+            ),
         )
     symbols = request.symbols or list(Symbol)
     timeframes = request.timeframes or list(Timeframe)
-    background.add_task(container.data_ingestion.sync_all, symbols, timeframes)
+    ingestion = await container.data_ingestion()
+    background.add_task(ingestion.sync_all, symbols, timeframes)
     return SyncScheduled(
         symbols=symbols, timeframes=timeframes, pairs=len(symbols) * len(timeframes)
     )

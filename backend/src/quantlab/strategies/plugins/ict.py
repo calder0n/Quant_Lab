@@ -33,8 +33,10 @@ class IctKillzone(Strategy):
         start = int(self.params["killzone_start"])
         end = int(self.params["killzone_end"])
         hours = pd.Series(data.index.hour, index=data.index)
-        in_killzone = (hours >= start) & (hours <= end) if start <= end else (
-            (hours >= start) | (hours <= end)
+        in_killzone = (
+            (hours >= start) & (hours <= end)
+            if start <= end
+            else ((hours >= start) | (hours <= end))
         )
         return self._frame(
             data,

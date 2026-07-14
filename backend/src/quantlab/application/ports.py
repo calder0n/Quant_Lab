@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from quantlab.domain.backtest import BacktestResult, CostModel, OrderPlan
+from quantlab.domain.broker import BrokerCredentials
 from quantlab.domain.datasets import Dataset
 from quantlab.domain.market import Symbol, Timeframe
 
@@ -69,6 +70,19 @@ class CandleStore(ABC):
         end: datetime | None = None,
     ) -> pd.DataFrame:
         """Read the series, optionally sliced to ``[start, end]``."""
+
+
+class BrokerSettingsRepository(ABC):
+    """Persistence port for broker credentials configured through the portal."""
+
+    @abstractmethod
+    async def get(self, broker: str) -> BrokerCredentials | None: ...
+
+    @abstractmethod
+    async def upsert(self, credentials: BrokerCredentials) -> BrokerCredentials: ...
+
+    @abstractmethod
+    async def delete(self, broker: str) -> None: ...
 
 
 class BacktestEngine(ABC):

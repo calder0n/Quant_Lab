@@ -69,5 +69,13 @@ class OandaClient:
         candles: list[dict[str, Any]] = response.json()["candles"]
         return candles
 
+    async def list_accounts(self) -> list[dict[str, Any]]:
+        """List the accounts accessible with this token (used to verify credentials)."""
+        response = await self._http.get("/v3/accounts")
+        if response.status_code != httpx.codes.OK:
+            raise OandaApiError(response.status_code, response.text)
+        accounts: list[dict[str, Any]] = response.json()["accounts"]
+        return accounts
+
     async def aclose(self) -> None:
         await self._http.aclose()

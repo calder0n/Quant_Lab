@@ -42,6 +42,7 @@ services:
       - ./backend/src:/app/src
       - ./backend/tests:/app/tests
       - ./backend/alembic:/app/alembic
+      - ./backend/scripts:/app/scripts
       - marketdata:/data
     ports:
       # 8080 on the host: 8000 is taken by another local project (fable_api)

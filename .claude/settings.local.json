@@ -19,7 +19,14 @@
       "Bash(python3 -c ' *)",
       "Bash(curl -s --max-time 120 -X POST http://localhost:8080/api/v1/backtests -H 'Content-Type: application/json' -d '{\"strategy_id\":\"ema_cross\",\"symbol\":\"EURUSD\",\"timeframe\":\"H1\"}')",
       "Bash(curl -s --max-time 120 -X POST http://localhost:8080/api/v1/backtests -H 'Content-Type: application/json' -d '{\"strategy_id\":\"liquidity_sweep\",\"symbol\":\"EURUSD\",\"timeframe\":\"H1\",\"params\":{\"lookback\":30,\"min_wick_atr\":0.2}}')",
-      "Bash(git commit -m 'Phase 3: strategy plugin system + vectorbt backtesting engine *)"
+      "Bash(git commit -m 'Phase 3: strategy plugin system + vectorbt backtesting engine *)",
+      "Bash(echo \"black exit: $?\")",
+      "Bash(echo \"gate exit: $?\")",
+      "Bash(curl -s http://localhost:8080/api/v1/settings/broker)",
+      "Bash(curl -s -X PUT http://localhost:8080/api/v1/settings/broker -H 'Content-Type: application/json' -d '{\"api_token\":\"test-dummy-token-abcd1234\",\"account_id\":\"001-004-1234567-001\",\"environment\":\"practice\"}')",
+      "Bash(curl -s -X PUT http://localhost:8080/api/v1/settings/broker -H 'Content-Type: application/json' -d '{\"account_id\":\"101-004-38636117-004\",\"environment\":\"practice\"}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/settings/broker/test)",
+      "Bash(git commit -m 'Add broker settings portal: configure OANDA credentials from the UI *)"
     ]
   }
 }

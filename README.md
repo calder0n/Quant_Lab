@@ -37,10 +37,13 @@ make check             # todo lo anterior
 
 ## Descarga de datos históricos
 
-1. Crea un token en OANDA (una cuenta *practice* gratuita sirve) y ponlo en `.env`:
-   `QL_OANDA_API_TOKEN=...`
-2. Ajusta `QL_HISTORY_START` (por defecto `2020-01-01`).
-3. `docker compose up -d` y pulsa **Sync history** en el dashboard
+1. Crea un token en OANDA (una cuenta *practice* gratuita sirve).
+2. Configúralo en el portal: **Broker settings** → API token + Account ID + entorno →
+   *Save* → *Test connection*. Las credenciales se guardan en tu PostgreSQL local,
+   el token nunca se vuelve a mostrar (solo enmascarado) y tienen prioridad sobre
+   las variables `QL_OANDA_*` del `.env` (que siguen funcionando como alternativa).
+3. Ajusta `QL_HISTORY_START` si quieres más histórico (por defecto `2020-01-01`).
+4. Pulsa **Sync history** en el dashboard
    (o `curl -X POST localhost:8080/api/v1/datasets/sync -H 'Content-Type: application/json' -d '{}'`).
 
 La descarga es **idempotente**: la cobertura real vive en los Parquet

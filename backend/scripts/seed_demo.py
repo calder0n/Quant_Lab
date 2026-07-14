@@ -50,9 +50,7 @@ def synthetic_candles(bars: int, seed: int = 42) -> pd.DataFrame:
 
 
 async def seed(container: Container) -> None:
-    coverage = container.candle_store.append(
-        DEMO_SYMBOL, DEMO_TIMEFRAME, synthetic_candles(BARS)
-    )
+    coverage = container.candle_store.append(DEMO_SYMBOL, DEMO_TIMEFRAME, synthetic_candles(BARS))
     async with container.dataset_repository() as repo:
         await repo.upsert(
             Dataset(

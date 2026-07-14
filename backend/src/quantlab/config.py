@@ -11,8 +11,9 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from quantlab.domain.broker import BrokerEnvironment
+
 Environment = Literal["dev", "test", "prod"]
-BrokerEnvironment = Literal["practice", "live"]
 
 
 class Settings(BaseSettings):

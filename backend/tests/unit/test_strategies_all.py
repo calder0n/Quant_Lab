@@ -51,9 +51,9 @@ def test_at_least_one_entry_on_rich_data(strategy_id: str, market_data: pd.DataF
     """Signal logic must produce activity on varied synthetic data."""
     strategy = REGISTRY.create(strategy_id, PERMISSIVE_PARAMS.get(strategy_id))
     signals = strategy.generate_signals(market_data)
-    assert (signals["long_entry"] | signals["short_entry"]).any(), (
-        f"{strategy_id} produced no entries at all"
-    )
+    assert (
+        signals["long_entry"] | signals["short_entry"]
+    ).any(), f"{strategy_id} produced no entries at all"
 
 
 @pytest.mark.parametrize("strategy_id", ALL_IDS)

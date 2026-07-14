@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import BacktestPanel from "./components/BacktestPanel";
+import BrokerSettingsPanel from "./components/BrokerSettingsPanel";
 import DatasetsPanel from "./components/DatasetsPanel";
 import StrategiesPanel from "./components/StrategiesPanel";
 
@@ -144,6 +145,7 @@ export default function Home() {
         )}
       </section>
 
+      <BrokerSettingsPanel />
       <DatasetsPanel />
       <StrategiesPanel />
       <BacktestPanel />

@@ -6,6 +6,7 @@ access and torn down in :meth:`aclose`. Nothing in QuantLab is a module-level
 global; anything that needs a dependency receives it from here.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, time
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from quantlab.application.event_bus import EventBus, InMemoryEventBus
 from quantlab.application.ports import (
     BacktestEngine,
+    BrokerSettingsRepository,
     CandleStore,
     DatasetRepository,
     MarketDataProvider,
@@ -23,13 +25,19 @@ from quantlab.application.ports import (
 from quantlab.application.services.backtesting import BacktestService
 from quantlab.application.services.data_ingestion import DataIngestionService
 from quantlab.config import Settings
+from quantlab.domain.broker import OANDA, BrokerCredentials
 from quantlab.infrastructure.brokers.oanda.client import OandaClient
 from quantlab.infrastructure.brokers.oanda.market_data import OandaMarketDataProvider
 from quantlab.infrastructure.cache.redis import create_redis
 from quantlab.infrastructure.data.parquet_store import ParquetCandleStore
+from quantlab.infrastructure.db.repositories.broker_settings import (
+    SqlAlchemyBrokerSettingsRepository,
+)
 from quantlab.infrastructure.db.repositories.dataset import SqlAlchemyDatasetRepository
 from quantlab.infrastructure.db.session import create_engine, create_session_factory
 from quantlab.strategies.registry import StrategyRegistry
+
+logger = logging.getLogger(__name__)
 
 
 class Container:
@@ -42,6 +50,7 @@ class Container:
         self._redis: Redis | None = None
         self._event_bus: EventBus | None = None
         self._market_data_provider: OandaMarketDataProvider | None = None
+        self._provider_fingerprint: tuple[str, str] | None = None
         self._candle_store: CandleStore | None = None
         self._data_ingestion: DataIngestionService | None = None
         self._strategy_registry: StrategyRegistry | None = None
@@ -76,14 +85,41 @@ class Container:
             self._event_bus = InMemoryEventBus()
         return self._event_bus
 
-    @property
-    def market_data_provider(self) -> MarketDataProvider:
-        if self._market_data_provider is None:
+    @asynccontextmanager
+    async def broker_settings_repository(self) -> AsyncIterator[BrokerSettingsRepository]:
+        """Open a transactional scope over the broker credentials store."""
+        async with self.session_factory() as session, session.begin():
+            yield SqlAlchemyBrokerSettingsRepository(session)
+
+    async def oanda_credentials(self) -> BrokerCredentials:
+        """Resolve OANDA credentials: portal-configured (DB) wins over environment."""
+        stored: BrokerCredentials | None = None
+        try:
+            async with self.broker_settings_repository() as repo:
+                stored = await repo.get(OANDA)
+        except Exception:
+            logger.warning("Could not read broker settings from database; using environment")
+        if stored is not None and stored.configured:
+            return stored
+        return BrokerCredentials(
+            api_token=self._settings.oanda_api_token,
+            account_id=self._settings.oanda_account_id,
+            environment=self._settings.oanda_environment,
+        )
+
+    async def market_data_provider(self) -> MarketDataProvider:
+        """OANDA adapter built from the current credentials; rebuilt when they change."""
+        credentials = await self.oanda_credentials()
+        fingerprint = (credentials.api_token, credentials.environment)
+        if self._market_data_provider is None or self._provider_fingerprint != fingerprint:
+            if self._market_data_provider is not None:
+                await self._market_data_provider.aclose()
             client = OandaClient(
-                api_token=self._settings.oanda_api_token,
-                environment=self._settings.oanda_environment,
+                api_token=credentials.api_token, environment=credentials.environment
             )
             self._market_data_provider = OandaMarketDataProvider(client)
+            self._provider_fingerprint = fingerprint
+            self._data_ingestion = None  # rebuilt with the new provider
         return self._market_data_provider
 
     @property
@@ -98,12 +134,13 @@ class Container:
         async with self.session_factory() as session, session.begin():
             yield SqlAlchemyDatasetRepository(session)
 
-    @property
-    def data_ingestion(self) -> DataIngestionService:
+    async def data_ingestion(self) -> DataIngestionService:
+        """Ingestion service bound to the currently configured credentials."""
+        provider = await self.market_data_provider()
         if self._data_ingestion is None:
             history_start = datetime.combine(self._settings.history_start, time.min, tzinfo=UTC)
             self._data_ingestion = DataIngestionService(
-                provider=self.market_data_provider,
+                provider=provider,
                 store=self.candle_store,
                 repositories=self.dataset_repository,
                 event_bus=self.event_bus,
@@ -143,6 +180,7 @@ class Container:
         if self._market_data_provider is not None:
             await self._market_data_provider.aclose()
             self._market_data_provider = None
+            self._provider_fingerprint = None
             self._data_ingestion = None
         if self._redis is not None:
             await self._redis.aclose()
