@@ -7,9 +7,11 @@ global; anything that needs a dependency receives it from here.
 """
 
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, time
+from typing import TYPE_CHECKING
 
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -21,9 +23,11 @@ from quantlab.application.ports import (
     CandleStore,
     DatasetRepository,
     MarketDataProvider,
+    OptimizationRepository,
 )
 from quantlab.application.services.backtesting import BacktestService
 from quantlab.application.services.data_ingestion import DataIngestionService
+from quantlab.application.services.optimization import OptimizationService
 from quantlab.config import Settings
 from quantlab.domain.broker import OANDA, BrokerCredentials
 from quantlab.infrastructure.brokers.oanda.client import OandaClient
@@ -34,8 +38,14 @@ from quantlab.infrastructure.db.repositories.broker_settings import (
     SqlAlchemyBrokerSettingsRepository,
 )
 from quantlab.infrastructure.db.repositories.dataset import SqlAlchemyDatasetRepository
+from quantlab.infrastructure.db.repositories.optimization import (
+    SqlAlchemyOptimizationRepository,
+)
 from quantlab.infrastructure.db.session import create_engine, create_session_factory
 from quantlab.strategies.registry import StrategyRegistry
+
+if TYPE_CHECKING:
+    from arq.connections import ArqRedis
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +66,8 @@ class Container:
         self._strategy_registry: StrategyRegistry | None = None
         self._backtest_engine: BacktestEngine | None = None
         self._backtest_service: BacktestService | None = None
+        self._optimization_service: OptimizationService | None = None
+        self._arq_pool: ArqRedis | None = None
 
     @property
     def settings(self) -> Settings:
@@ -175,8 +187,51 @@ class Container:
             )
         return self._backtest_service
 
+    @asynccontextmanager
+    async def optimization_repository(self) -> AsyncIterator[OptimizationRepository]:
+        """Open a transactional scope over the optimization store."""
+        async with self.session_factory() as session, session.begin():
+            yield SqlAlchemyOptimizationRepository(session)
+
+    @property
+    def optimization_service(self) -> OptimizationService:
+        if self._optimization_service is None:
+            # Imported lazily: optuna is heavy and only workers run studies.
+            from quantlab.infrastructure.optimizers.optuna_optimizer import OptunaOptimizer
+            from quantlab.infrastructure.optimizers.random_search import RandomSearchOptimizer
+
+            self._optimization_service = OptimizationService(
+                store=self.candle_store,
+                registry=self.strategy_registry,
+                engine=self.backtest_engine,
+                repositories=self.optimization_repository,
+                event_bus=self.event_bus,
+                optimizers={"optuna": OptunaOptimizer, "random": RandomSearchOptimizer},
+            )
+        return self._optimization_service
+
+    async def job_queue(self) -> "ArqRedis":
+        """Redis-backed job queue (arq) used to dispatch work to workers."""
+        if self._arq_pool is None:
+            from arq import create_pool
+
+            from quantlab.interfaces.worker.settings import redis_settings
+
+            self._arq_pool = await create_pool(redis_settings(self._settings))
+        return self._arq_pool
+
+    async def enqueue_optimization(self, study_id: uuid.UUID) -> None:
+        """Queue one study for execution by a worker."""
+        from quantlab.interfaces.worker.settings import OPTIMIZATION_JOB, QUEUE_NAME
+
+        pool = await self.job_queue()
+        await pool.enqueue_job(OPTIMIZATION_JOB, str(study_id), _queue_name=QUEUE_NAME)
+
     async def aclose(self) -> None:
         """Release every resource that was actually created."""
+        if self._arq_pool is not None:
+            await self._arq_pool.aclose()
+            self._arq_pool = None
         if self._market_data_provider is not None:
             await self._market_data_provider.aclose()
             self._market_data_provider = None

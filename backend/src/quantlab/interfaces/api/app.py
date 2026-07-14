@@ -17,7 +17,9 @@ from quantlab.interfaces.api.routes import (
     backtests,
     datasets,
     health,
+    optimizations,
     strategies,
+    workers,
 )
 from quantlab.interfaces.api.routes import settings as settings_routes
 
@@ -46,4 +48,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(strategies.router, prefix=app_settings.api_v1_prefix)
     app.include_router(backtests.router, prefix=app_settings.api_v1_prefix)
     app.include_router(settings_routes.router, prefix=app_settings.api_v1_prefix)
+    app.include_router(optimizations.router, prefix=app_settings.api_v1_prefix)
+    app.include_router(workers.router, prefix=app_settings.api_v1_prefix)
     return app

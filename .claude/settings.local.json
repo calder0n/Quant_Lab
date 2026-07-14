@@ -26,7 +26,19 @@
       "Bash(curl -s -X PUT http://localhost:8080/api/v1/settings/broker -H 'Content-Type: application/json' -d '{\"api_token\":\"test-dummy-token-abcd1234\",\"account_id\":\"001-004-1234567-001\",\"environment\":\"practice\"}')",
       "Bash(curl -s -X PUT http://localhost:8080/api/v1/settings/broker -H 'Content-Type: application/json' -d '{\"account_id\":\"101-004-38636117-004\",\"environment\":\"practice\"}')",
       "Bash(curl -s -X POST http://localhost:8080/api/v1/settings/broker/test)",
-      "Bash(git commit -m 'Add broker settings portal: configure OANDA credentials from the UI *)"
+      "Bash(git commit -m 'Add broker settings portal: configure OANDA credentials from the UI *)",
+      "Bash(curl -s --max-time 30 -X POST http://localhost:8080/api/v1/settings/broker/test)",
+      "Bash(python3 -c \"import json,sys; [print\\(d['symbol'], d['timeframe'], d['status'], d['candle_count'], d['source']\\) for d in json.load\\(sys.stdin\\)]\")",
+      "Bash(grep -vE \"Container|^\\\\s*$\")",
+      "Bash(curl -s http://localhost:8080/api/v1/workers)",
+      "Bash(python3 -c \"import json,sys; rows=json.load\\(sys.stdin\\); print\\([f\\\\\"{d['symbol']} {d['timeframe']} {d['status']} {d['candle_count']:,}\\\\\" for d in rows if d['symbol']=='EURUSD' and d['timeframe']=='H1']\\)\")",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/optimizations -H 'Content-Type: application/json' -d '{\"strategy_id\":\"ema_cross\",\"symbol\":\"EURUSD\",\"timeframe\":\"H1\",\"optimizer\":\"optuna\",\"n_trials\":30,\"seed\":42,\"objective\":{\"min_trades\":20}}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"http://localhost:8080/api/v1/optimizations/b2f56611-0001-4915-b28a-1ae4d7279248\")",
+      "Bash(python3 -c \"import json,sys; s=json.load\\(sys.stdin\\); print\\(s['status'], s['trials_completed'], '/', s['n_trials'], 'best:', s['best_score']\\)\")",
+      "Bash(curl -s \"http://localhost:8080/api/v1/optimizations/b2f56611-0001-4915-b28a-1ae4d7279248/trials?limit=3\")",
+      "Bash(python3 -c \"import json,sys; print\\('sync relanzado:', json.load\\(sys.stdin\\)['pairs'], 'pares'\\)\")",
+      "Bash(git commit -m 'Phase 4: massive optimization — Optuna + configurable objective + Redis workers *)"
     ]
   }
 }

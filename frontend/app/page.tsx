@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import BacktestPanel from "./components/BacktestPanel";
 import BrokerSettingsPanel from "./components/BrokerSettingsPanel";
 import DatasetsPanel from "./components/DatasetsPanel";
+import OptimizationsPanel from "./components/OptimizationsPanel";
 import StrategiesPanel from "./components/StrategiesPanel";
 
 type ComponentStatus = {
@@ -148,6 +149,7 @@ export default function Home() {
       <BrokerSettingsPanel />
       <DatasetsPanel />
       <StrategiesPanel />
+      <OptimizationsPanel />
       <BacktestPanel />
     </main>
   );

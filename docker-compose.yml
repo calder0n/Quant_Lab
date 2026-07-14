@@ -64,6 +64,27 @@ services:
         "--reload",
       ]
 
+  worker:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      QL_POSTGRES_HOST: postgres
+      QL_REDIS_HOST: redis
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/tests:/app/tests
+      - ./backend/alembic:/app/alembic
+      - ./backend/scripts:/app/scripts
+      - marketdata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["arq", "quantlab.interfaces.worker.settings.WorkerSettings"]
+
   frontend:
     build: ./frontend
     environment:

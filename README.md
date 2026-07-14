@@ -3,7 +3,7 @@
 Laboratorio de investigación cuantitativa: descubrimiento masivo de estrategias mediante
 backtesting, optimización y validación robusta. Ejecución 100% local sobre Docker.
 
-> **Estado:** Fase 3 — Estrategias (15 plugins auto-descubiertos) + backtesting con vectorbt.
+> **Estado:** Fase 4 — Optimización masiva (Optuna + workers distribuidos sobre Redis).
 
 ## Stack
 
@@ -62,6 +62,18 @@ los rangos que faltan. Repetir el sync solo trae velas nuevas.
 - Prueba sin broker: `make seed-demo` crea un dataset sintético EURUSD/H1
   (elimínalo con `make clean-demo` antes de sincronizar datos reales).
 
+## Optimización masiva
+
+- Lanza estudios desde el panel **Optimization** (o `POST /api/v1/optimizations`):
+  estrategia × dataset × nº de trials × optimizador.
+- Optimizadores tras el puerto `Optimizer`: `optuna` (TPE/bayesiano) y `random`
+  (baseline). Añadir GA/Nevergrad = un adaptador más con la misma interfaz.
+- Función objetivo configurable por estudio: pesos sobre las 12 métricas
+  normalizadas + restricciones (`min_trades`, `max_drawdown_limit`).
+- Los estudios corren en **workers** (contenedor `worker`, cola arq sobre Redis).
+  Escala con: `docker compose up -d --scale worker=4`. Estado en `GET /api/v1/workers`.
+- Cada trial se persiste al completarse: progreso y ranking en vivo en el dashboard.
+
 ## Arquitectura (backend)
 
 ```
@@ -84,7 +96,7 @@ los módulos se comunican por eventos de dominio a través del `EventBus`.
 | 1 ✅ | Fundación: Docker, Clean Architecture, DI, Event Bus, health checks |
 | 2 ✅ | Datos: adaptador OANDA, descarga histórica idempotente → Parquet + catálogo en PostgreSQL |
 | 3 ✅ | Estrategias (plugins auto-descubiertos) + motor de backtesting |
-| 4 | Optimización masiva (Optuna/GA/Nevergrad/Bayesian) con función objetivo configurable |
+| 4 ✅ | Optimización masiva (Optuna/GA/Nevergrad/Bayesian) con función objetivo configurable |
 | 5 | Validación: Walk-Forward, Monte Carlo, stress testing, costes realistas |
 | 6 | ML (clasificadores/regresores) y RL (Gymnasium + SB3) |
 | 7 | Dashboard completo: heatmaps, equity, drawdown, ranking, logs |

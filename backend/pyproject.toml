@@ -20,6 +20,8 @@ dependencies = [
     "pandas>=2.2",
     "pyarrow>=18.0",
     "vectorbt>=0.27",
+    "optuna>=4.0",
+    "arq>=0.26",
 ]
 
 [project.optional-dependencies]
