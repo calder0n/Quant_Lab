@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import BacktestPanel from "./components/BacktestPanel";
 import DatasetsPanel from "./components/DatasetsPanel";
+import StrategiesPanel from "./components/StrategiesPanel";
 
 type ComponentStatus = {
   status: "ok" | "error";
@@ -143,6 +145,8 @@ export default function Home() {
       </section>
 
       <DatasetsPanel />
+      <StrategiesPanel />
+      <BacktestPanel />
     </main>
   );
 }

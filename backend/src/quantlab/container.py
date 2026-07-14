@@ -14,7 +14,13 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from quantlab.application.event_bus import EventBus, InMemoryEventBus
-from quantlab.application.ports import CandleStore, DatasetRepository, MarketDataProvider
+from quantlab.application.ports import (
+    BacktestEngine,
+    CandleStore,
+    DatasetRepository,
+    MarketDataProvider,
+)
+from quantlab.application.services.backtesting import BacktestService
 from quantlab.application.services.data_ingestion import DataIngestionService
 from quantlab.config import Settings
 from quantlab.infrastructure.brokers.oanda.client import OandaClient
@@ -23,6 +29,7 @@ from quantlab.infrastructure.cache.redis import create_redis
 from quantlab.infrastructure.data.parquet_store import ParquetCandleStore
 from quantlab.infrastructure.db.repositories.dataset import SqlAlchemyDatasetRepository
 from quantlab.infrastructure.db.session import create_engine, create_session_factory
+from quantlab.strategies.registry import StrategyRegistry
 
 
 class Container:
@@ -37,6 +44,9 @@ class Container:
         self._market_data_provider: OandaMarketDataProvider | None = None
         self._candle_store: CandleStore | None = None
         self._data_ingestion: DataIngestionService | None = None
+        self._strategy_registry: StrategyRegistry | None = None
+        self._backtest_engine: BacktestEngine | None = None
+        self._backtest_service: BacktestService | None = None
 
     @property
     def settings(self) -> Settings:
@@ -100,6 +110,33 @@ class Container:
                 history_start=history_start,
             )
         return self._data_ingestion
+
+    @property
+    def strategy_registry(self) -> StrategyRegistry:
+        if self._strategy_registry is None:
+            self._strategy_registry = StrategyRegistry().discover()
+        return self._strategy_registry
+
+    @property
+    def backtest_engine(self) -> BacktestEngine:
+        if self._backtest_engine is None:
+            # Imported lazily: vectorbt/numba are heavy and not every process needs them.
+            from quantlab.infrastructure.backtesting.vectorbt_engine import (
+                VectorbtBacktestEngine,
+            )
+
+            self._backtest_engine = VectorbtBacktestEngine()
+        return self._backtest_engine
+
+    @property
+    def backtest_service(self) -> BacktestService:
+        if self._backtest_service is None:
+            self._backtest_service = BacktestService(
+                store=self.candle_store,
+                registry=self.strategy_registry,
+                engine=self.backtest_engine,
+            )
+        return self._backtest_service
 
     async def aclose(self) -> None:
         """Release every resource that was actually created."""

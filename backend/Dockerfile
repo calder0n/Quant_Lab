@@ -13,6 +13,7 @@ RUN pip install -e ".[dev]"
 
 COPY alembic.ini ./
 COPY alembic ./alembic
+COPY scripts ./scripts
 COPY tests ./tests
 
 EXPOSE 8000

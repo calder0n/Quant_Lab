@@ -3,7 +3,7 @@
 Laboratorio de investigación cuantitativa: descubrimiento masivo de estrategias mediante
 backtesting, optimización y validación robusta. Ejecución 100% local sobre Docker.
 
-> **Estado:** Fase 2 — Capa de datos (OANDA, Parquet, catálogo de datasets).
+> **Estado:** Fase 3 — Estrategias (15 plugins auto-descubiertos) + backtesting con vectorbt.
 
 ## Stack
 
@@ -47,6 +47,18 @@ La descarga es **idempotente**: la cobertura real vive en los Parquet
 (`/data/candles/{SYMBOL}/{TF}.parquet`, volumen `marketdata`) y solo se piden a la API
 los rangos que faltan. Repetir el sync solo trae velas nuevas.
 
+## Estrategias y backtesting
+
+- 15 estrategias en `backend/src/quantlab/strategies/plugins/` (una por archivo,
+  auto-descubiertas). Añadir una estrategia = crear un archivo que implemente
+  `load / generate_signals / generate_orders / fitness / metadata`.
+- Cada plugin declara sus parámetros optimizables (`ParameterSpec`) y hereda los
+  de riesgo comunes: `sl_atr`, `tp_atr`, `use_trailing`, filtro horario y de spread.
+- Motor: vectorbt tras el puerto `BacktestEngine` (señales desplazadas 1 barra,
+  costes: comisión + slippage + medio spread real por lado).
+- Prueba sin broker: `make seed-demo` crea un dataset sintético EURUSD/H1
+  (elimínalo con `make clean-demo` antes de sincronizar datos reales).
+
 ## Arquitectura (backend)
 
 ```
@@ -68,7 +80,7 @@ los módulos se comunican por eventos de dominio a través del `EventBus`.
 |------|-----------|
 | 1 ✅ | Fundación: Docker, Clean Architecture, DI, Event Bus, health checks |
 | 2 ✅ | Datos: adaptador OANDA, descarga histórica idempotente → Parquet + catálogo en PostgreSQL |
-| 3 | Estrategias (plugins auto-descubiertos) + motor de backtesting |
+| 3 ✅ | Estrategias (plugins auto-descubiertos) + motor de backtesting |
 | 4 | Optimización masiva (Optuna/GA/Nevergrad/Bayesian) con función objetivo configurable |
 | 5 | Validación: Walk-Forward, Monte Carlo, stress testing, costes realistas |
 | 6 | ML (clasificadores/regresores) y RL (Gymnasium + SB3) |

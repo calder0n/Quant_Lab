@@ -19,6 +19,7 @@ dependencies = [
     "httpx>=0.28",
     "pandas>=2.2",
     "pyarrow>=18.0",
+    "vectorbt>=0.27",
 ]
 
 [project.optional-dependencies]
@@ -69,6 +70,10 @@ strict = true
 mypy_path = "src"
 packages = ["quantlab"]
 exclude = ["alembic/"]
+
+[[tool.mypy.overrides]]
+module = ["vectorbt.*", "numba.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

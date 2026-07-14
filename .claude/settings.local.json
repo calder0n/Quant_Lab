@@ -12,7 +12,14 @@
       "Bash(git commit -m 'Phase 1: foundation — Docker stack, Clean Architecture skeleton, DI, event bus, health checks *)",
       "Bash(curl -s http://localhost:8080/api/v1/datasets)",
       "Bash(curl -s -X POST http://localhost:8080/api/v1/datasets/sync -H 'Content-Type: application/json' -d '{}')",
-      "Bash(git commit -m 'Phase 2: data layer — OANDA adapter, idempotent Parquet ingestion, dataset catalog *)"
+      "Bash(git commit -m 'Phase 2: data layer — OANDA adapter, idempotent Parquet ingestion, dataset catalog *)",
+      "Bash(curl -s http://localhost:8080/api/v1/strategies)",
+      "Bash(python3 -c \"import json,sys; s=json.load\\(sys.stdin\\); print\\('estrategias:', len\\(s\\)\\); print\\(sorted\\(x['strategy_id'] for x in s\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/backtests -H 'Content-Type: application/json' -d '{\"strategy_id\":\"ema_cross\",\"symbol\":\"EURUSD\",\"timeframe\":\"H1\"}')",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s --max-time 120 -X POST http://localhost:8080/api/v1/backtests -H 'Content-Type: application/json' -d '{\"strategy_id\":\"ema_cross\",\"symbol\":\"EURUSD\",\"timeframe\":\"H1\"}')",
+      "Bash(curl -s --max-time 120 -X POST http://localhost:8080/api/v1/backtests -H 'Content-Type: application/json' -d '{\"strategy_id\":\"liquidity_sweep\",\"symbol\":\"EURUSD\",\"timeframe\":\"H1\",\"params\":{\"lookback\":30,\"min_wick_atr\":0.2}}')",
+      "Bash(git commit -m 'Phase 3: strategy plugin system + vectorbt backtesting engine *)"
     ]
   }
 }
