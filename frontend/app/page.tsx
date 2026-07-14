@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import DatasetsPanel from "./components/DatasetsPanel";
+
 type ComponentStatus = {
   status: "ok" | "error";
   detail: string | null;
@@ -139,6 +141,8 @@ export default function Home() {
           ))
         )}
       </section>
+
+      <DatasetsPanel />
     </main>
   );
 }

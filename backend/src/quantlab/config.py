@@ -5,11 +5,14 @@ or an optional ``.env`` file. No module-level singletons: callers instantiate
 ``Settings`` explicitly (normally once, inside the composition root).
 """
 
+from datetime import date
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["dev", "test", "prod"]
+BrokerEnvironment = Literal["practice", "live"]
 
 
 class Settings(BaseSettings):
@@ -41,6 +44,15 @@ class Settings(BaseSettings):
 
     # Health checks
     health_check_timeout_seconds: float = 2.0
+
+    # Market data storage
+    data_dir: Path = Path("/data")
+    history_start: date = date(2020, 1, 1)
+
+    # OANDA
+    oanda_api_token: str = ""
+    oanda_environment: BrokerEnvironment = "practice"
+    oanda_account_id: str = ""
 
     @property
     def postgres_dsn(self) -> str:

@@ -3,7 +3,7 @@
 Laboratorio de investigación cuantitativa: descubrimiento masivo de estrategias mediante
 backtesting, optimización y validación robusta. Ejecución 100% local sobre Docker.
 
-> **Estado:** Fase 1 — Fundación (infraestructura, arquitectura base, health checks).
+> **Estado:** Fase 2 — Capa de datos (OANDA, Parquet, catálogo de datasets).
 
 ## Stack
 
@@ -35,6 +35,18 @@ make typecheck         # mypy --strict
 make check             # todo lo anterior
 ```
 
+## Descarga de datos históricos
+
+1. Crea un token en OANDA (una cuenta *practice* gratuita sirve) y ponlo en `.env`:
+   `QL_OANDA_API_TOKEN=...`
+2. Ajusta `QL_HISTORY_START` (por defecto `2020-01-01`).
+3. `docker compose up -d` y pulsa **Sync history** en el dashboard
+   (o `curl -X POST localhost:8080/api/v1/datasets/sync -H 'Content-Type: application/json' -d '{}'`).
+
+La descarga es **idempotente**: la cobertura real vive en los Parquet
+(`/data/candles/{SYMBOL}/{TF}.parquet`, volumen `marketdata`) y solo se piden a la API
+los rangos que faltan. Repetir el sync solo trae velas nuevas.
+
 ## Arquitectura (backend)
 
 ```
@@ -55,7 +67,7 @@ los módulos se comunican por eventos de dominio a través del `EventBus`.
 | Fase | Contenido |
 |------|-----------|
 | 1 ✅ | Fundación: Docker, Clean Architecture, DI, Event Bus, health checks |
-| 2 | Datos: adaptador OANDA, descarga histórica idempotente → Parquet + catálogo en PostgreSQL |
+| 2 ✅ | Datos: adaptador OANDA, descarga histórica idempotente → Parquet + catálogo en PostgreSQL |
 | 3 | Estrategias (plugins auto-descubiertos) + motor de backtesting |
 | 4 | Optimización masiva (Optuna/GA/Nevergrad/Bayesian) con función objetivo configurable |
 | 5 | Validación: Walk-Forward, Monte Carlo, stress testing, costes realistas |

@@ -6,12 +6,22 @@ access and torn down in :meth:`aclose`. Nothing in QuantLab is a module-level
 global; anything that needs a dependency receives it from here.
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, time
+
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from quantlab.application.event_bus import EventBus, InMemoryEventBus
+from quantlab.application.ports import CandleStore, DatasetRepository, MarketDataProvider
+from quantlab.application.services.data_ingestion import DataIngestionService
 from quantlab.config import Settings
+from quantlab.infrastructure.brokers.oanda.client import OandaClient
+from quantlab.infrastructure.brokers.oanda.market_data import OandaMarketDataProvider
 from quantlab.infrastructure.cache.redis import create_redis
+from quantlab.infrastructure.data.parquet_store import ParquetCandleStore
+from quantlab.infrastructure.db.repositories.dataset import SqlAlchemyDatasetRepository
 from quantlab.infrastructure.db.session import create_engine, create_session_factory
 
 
@@ -24,6 +34,9 @@ class Container:
         self._session_factory: async_sessionmaker[AsyncSession] | None = None
         self._redis: Redis | None = None
         self._event_bus: EventBus | None = None
+        self._market_data_provider: OandaMarketDataProvider | None = None
+        self._candle_store: CandleStore | None = None
+        self._data_ingestion: DataIngestionService | None = None
 
     @property
     def settings(self) -> Settings:
@@ -53,8 +66,47 @@ class Container:
             self._event_bus = InMemoryEventBus()
         return self._event_bus
 
+    @property
+    def market_data_provider(self) -> MarketDataProvider:
+        if self._market_data_provider is None:
+            client = OandaClient(
+                api_token=self._settings.oanda_api_token,
+                environment=self._settings.oanda_environment,
+            )
+            self._market_data_provider = OandaMarketDataProvider(client)
+        return self._market_data_provider
+
+    @property
+    def candle_store(self) -> CandleStore:
+        if self._candle_store is None:
+            self._candle_store = ParquetCandleStore(self._settings.data_dir / "candles")
+        return self._candle_store
+
+    @asynccontextmanager
+    async def dataset_repository(self) -> AsyncIterator[DatasetRepository]:
+        """Open a transactional, request-independent repository scope."""
+        async with self.session_factory() as session, session.begin():
+            yield SqlAlchemyDatasetRepository(session)
+
+    @property
+    def data_ingestion(self) -> DataIngestionService:
+        if self._data_ingestion is None:
+            history_start = datetime.combine(self._settings.history_start, time.min, tzinfo=UTC)
+            self._data_ingestion = DataIngestionService(
+                provider=self.market_data_provider,
+                store=self.candle_store,
+                repositories=self.dataset_repository,
+                event_bus=self.event_bus,
+                history_start=history_start,
+            )
+        return self._data_ingestion
+
     async def aclose(self) -> None:
         """Release every resource that was actually created."""
+        if self._market_data_provider is not None:
+            await self._market_data_provider.aclose()
+            self._market_data_provider = None
+            self._data_ingestion = None
         if self._redis is not None:
             await self._redis.aclose()
             self._redis = None

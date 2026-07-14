@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from quantlab import __version__
 from quantlab.config import Settings
 from quantlab.container import Container
-from quantlab.interfaces.api.routes import health
+from quantlab.interfaces.api.routes import datasets, health
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -36,4 +36,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(health.router, prefix=app_settings.api_v1_prefix)
+    app.include_router(datasets.router, prefix=app_settings.api_v1_prefix)
     return app

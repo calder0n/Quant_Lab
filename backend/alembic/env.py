@@ -7,6 +7,7 @@ from alembic import context
 from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+import quantlab.infrastructure.db.models  # noqa: F401  (populate Base.metadata)
 from quantlab.config import Settings
 from quantlab.infrastructure.db.base import Base
 
