@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { apiFetch } from "../lib/api";
+
 type LogEntry = {
   time: string | null;
   level: string;
@@ -21,7 +23,7 @@ export default function LogsPanel() {
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch("/api/backend/logs?limit=80", { cache: "no-store" });
+      const response = await apiFetch("/logs?limit=80", { cache: "no-store" });
       if (response.ok) setLogs(await response.json());
     } catch {
       // keep last state

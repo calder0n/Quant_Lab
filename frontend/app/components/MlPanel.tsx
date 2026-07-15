@@ -2,6 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 
+import { apiFetch } from "../lib/api";
+
 type DatasetOption = { symbol: string; timeframe: string; status: string };
 
 type MlModel = {
@@ -95,8 +97,8 @@ export default function MlPanel() {
   const refresh = useCallback(async () => {
     try {
       const [modelsRes, datasetsRes] = await Promise.all([
-        fetch("/api/backend/ml/models", { cache: "no-store" }),
-        fetch("/api/backend/datasets", { cache: "no-store" }),
+        apiFetch("/ml/models", { cache: "no-store" }),
+        apiFetch("/datasets", { cache: "no-store" }),
       ]);
       if (modelsRes.ok) setModels(await modelsRes.json());
       if (datasetsRes.ok) {
@@ -125,7 +127,7 @@ export default function MlPanel() {
     setLaunching(true);
     setError(null);
     try {
-      const response = await fetch("/api/backend/ml/models", {
+      const response = await apiFetch("/ml/models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

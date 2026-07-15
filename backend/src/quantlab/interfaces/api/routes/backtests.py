@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from quantlab.application.services.backtesting import DataNotAvailableError
 from quantlab.domain.backtest import BacktestMetrics, BacktestResult, CostModel
 from quantlab.domain.market import Symbol, Timeframe
-from quantlab.interfaces.api.deps import ContainerDep
+from quantlab.interfaces.api.deps import AdminUser, ContainerDep
 from quantlab.strategies.base import InvalidParameterError, ParamValue
 from quantlab.strategies.registry import UnknownStrategyError
 
@@ -64,7 +64,9 @@ class BacktestResponse(BaseModel):
 
 
 @router.post("", response_model=BacktestResponse)
-def run_backtest(request: BacktestRequest, container: ContainerDep) -> BacktestResponse:
+def run_backtest(
+    request: BacktestRequest, container: ContainerDep, _: AdminUser
+) -> BacktestResponse:
     """Run one strategy over locally stored data (sync the dataset first)."""
     try:
         result = container.backtest_service.run(

@@ -52,7 +52,12 @@
       "Bash(curl -s --max-time 120 -X POST http://localhost:8080/api/v1/backtests -H 'Content-Type: application/json' -d '{\"strategy_id\":\"donchian\",\"symbol\":\"XAUUSD\",\"timeframe\":\"H4\"}')",
       "Bash(curl -s -X POST http://localhost:8080/api/v1/datasets/sync -H 'Content-Type: application/json' -d '{\"symbols\":[\"EURUSD\"],\"timeframes\":[\"D1\"]}')",
       "Bash(curl -s \"http://localhost:8080/api/v1/logs?limit=5\")",
-      "Bash(git commit -m 'Phase 7: full dashboard — Plotly charts, edge heatmap, global ranking, logs *)"
+      "Bash(git commit -m 'Phase 7: full dashboard — Plotly charts, edge heatmap, global ranking, logs *)",
+      "Bash(curl -s http://localhost:8080/api/v1/auth/status)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8080/api/v1/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8080/api/v1/strategies)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8080/api/v1/trading/status)",
+      "Bash(git commit -m 'Phase 8: administration \\(auth/roles/API keys\\) + OANDA paper/live execution *)"
     ]
   }
 }

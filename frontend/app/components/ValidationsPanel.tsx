@@ -2,6 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 
+import { apiFetch } from "../lib/api";
+
 type StrategyOption = { strategy_id: string; name: string };
 type DatasetOption = { symbol: string; timeframe: string; status: string };
 
@@ -185,7 +187,7 @@ export default function ValidationsPanel() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/backend/strategies", { cache: "no-store" })
+    apiFetch("/strategies", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : []))
       .then((list: StrategyOption[]) => {
         setStrategies(list);
@@ -197,8 +199,8 @@ export default function ValidationsPanel() {
   const refresh = useCallback(async () => {
     try {
       const [runsRes, datasetsRes] = await Promise.all([
-        fetch("/api/backend/validations", { cache: "no-store" }),
-        fetch("/api/backend/datasets", { cache: "no-store" }),
+        apiFetch("/validations", { cache: "no-store" }),
+        apiFetch("/datasets", { cache: "no-store" }),
       ]);
       if (runsRes.ok) setRuns(await runsRes.json());
       if (datasetsRes.ok) {
@@ -227,7 +229,7 @@ export default function ValidationsPanel() {
     setLaunching(true);
     setError(null);
     try {
-      const response = await fetch("/api/backend/validations", {
+      const response = await apiFetch("/validations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind, strategy_id: strategyId, symbol, timeframe, config: {} }),

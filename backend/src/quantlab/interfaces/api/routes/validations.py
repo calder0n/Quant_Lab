@@ -11,7 +11,7 @@ from quantlab.domain.market import Symbol, Timeframe
 from quantlab.domain.objective import InvalidObjectiveError, ObjectiveConfig
 from quantlab.domain.optimization import StudyStatus
 from quantlab.domain.validation import ValidationKind, ValidationRun
-from quantlab.interfaces.api.deps import ContainerDep
+from quantlab.interfaces.api.deps import AdminUser, ContainerDep
 from quantlab.strategies.base import InvalidParameterError, ParamValue
 from quantlab.strategies.registry import UnknownStrategyError
 
@@ -60,7 +60,9 @@ class ValidationOut(BaseModel):
 
 
 @router.post("", response_model=ValidationOut, status_code=status.HTTP_202_ACCEPTED)
-async def create_validation(request: ValidationCreate, container: ContainerDep) -> ValidationOut:
+async def create_validation(
+    request: ValidationCreate, container: ContainerDep, _: AdminUser
+) -> ValidationOut:
     """Persist a validation run and queue it for execution by a worker."""
     try:
         strategy_class = container.strategy_registry.get(request.strategy_id)

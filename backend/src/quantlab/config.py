@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     # Health checks
     health_check_timeout_seconds: float = 2.0
 
+    # Auth
+    auth_enabled: bool = True
+    secret_key: str = "change-me-quantlab-local-secret"
+    access_token_ttl_minutes: int = 12 * 60
+
     # Market data storage
     data_dir: Path = Path("/data")
     history_start: date = date(2020, 1, 1)

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from quantlab.domain.datasets import Dataset, DatasetStatus
 from quantlab.domain.market import Symbol, Timeframe
-from quantlab.interfaces.api.deps import ContainerDep
+from quantlab.interfaces.api.deps import AdminUser, ContainerDep
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
@@ -64,7 +64,7 @@ async def list_datasets(container: ContainerDep) -> list[DatasetOut]:
 
 @router.post("/sync", response_model=SyncScheduled, status_code=status.HTTP_202_ACCEPTED)
 async def sync_datasets(
-    request: SyncRequest, background: BackgroundTasks, container: ContainerDep
+    request: SyncRequest, background: BackgroundTasks, container: ContainerDep, _: AdminUser
 ) -> SyncScheduled:
     """Schedule an idempotent background download of the missing history."""
     credentials = await container.oanda_credentials()

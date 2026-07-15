@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { apiFetch } from "../lib/api";
+
 import PlotlyChart from "./PlotlyChart";
 
 type DatasetOption = { symbol: string; timeframe: string; status: string };
@@ -66,14 +68,14 @@ export default function BacktestPanel() {
   const [result, setResult] = useState<BacktestResponse | null>(null);
 
   useEffect(() => {
-    fetch("/api/backend/strategies", { cache: "no-store" })
+    apiFetch("/strategies", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : []))
       .then((list: StrategyOption[]) => {
         setStrategies(list);
         if (list.length > 0) setStrategyId(list[0].strategy_id);
       })
       .catch(() => setStrategies([]));
-    fetch("/api/backend/datasets", { cache: "no-store" })
+    apiFetch("/datasets", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : []))
       .then((list: DatasetOption[]) => {
         const ready = list.filter((d) => d.status === "ready");
@@ -90,7 +92,7 @@ export default function BacktestPanel() {
     setError(null);
     setResult(null);
     try {
-      const response = await fetch("/api/backend/backtests", {
+      const response = await apiFetch("/backtests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ strategy_id: strategyId, symbol, timeframe }),

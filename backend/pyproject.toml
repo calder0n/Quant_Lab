@@ -30,6 +30,9 @@ dependencies = [
     "joblib>=1.4",
     "gymnasium>=1.0",
     "stable-baselines3>=2.4",
+    "pyjwt>=2.9",
+    "bcrypt>=4.2",
+    "cryptography>=43.0",
 ]
 
 [project.optional-dependencies]

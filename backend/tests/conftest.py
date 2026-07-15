@@ -66,4 +66,4 @@ class StubContainer:
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings(_env_file=None, environment="test")
+    return Settings(_env_file=None, environment="test", auth_enabled=False)

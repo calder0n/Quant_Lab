@@ -3,7 +3,7 @@
 Laboratorio de investigación cuantitativa: descubrimiento masivo de estrategias mediante
 backtesting, optimización y validación robusta. Ejecución 100% local sobre Docker.
 
-> **Estado:** Fase 7 — Dashboard completo (Plotly: equity, drawdown, distribución, heatmap, ranking, logs).
+> **Estado:** Fase 8 — Administración (login/roles/API keys) + ejecución paper/live vía OANDA. **Todas las fases completadas.**
 
 ## Stack
 
@@ -106,6 +106,27 @@ Panel **Machine Learning** (o `POST /api/v1/ml/models`); entrena en los workers:
   retorno de la posición − costes. Entrena en el 80% inicial y evalúa la
   política determinista en el 20% final (held-out).
 
+## Administración y seguridad
+
+- Primer arranque: el portal pide crear el usuario administrador (solo posible
+  mientras no exista ninguno). Roles: `admin` (todo) y `viewer` (solo lectura).
+- Sesiones JWT + **API keys** (`X-API-Key`) para acceso programático; la clave
+  se muestra una única vez. Define `QL_SECRET_KEY` propio en `.env`.
+- El token de OANDA se cifra en reposo (Fernet derivado de `QL_SECRET_KEY`).
+- Desarrollo local sin login: `QL_AUTH_ENABLED=false`.
+
+## Trading (paper/live) — bajo tu control
+
+Panel **Trading** (solo admin):
+
+- **Kill switch persistido, OFF por defecto.** Nada opera hasta que un admin lo
+  habilita; con credenciales `live` exige además teclear `TRADE-LIVE`.
+- `POST /api/v1/trading/execute` evalúa una estrategia sobre velas frescas del
+  broker y ejecuta la señal de la última barra cerrada (orden de mercado con
+  SL/TP del plan de la estrategia; salidas/reversas cierran posición).
+- Usa el entorno **practice** de OANDA para paper trading. Valida cualquier
+  estrategia (walk-forward, stress, Monte Carlo) antes de operarla.
+
 ## Arquitectura (backend)
 
 ```
@@ -132,4 +153,4 @@ los módulos se comunican por eventos de dominio a través del `EventBus`.
 | 5 ✅ | Validación: Walk-Forward, Monte Carlo, stress testing, costes realistas |
 | 6 ✅ | ML (clasificadores/regresores) y RL (Gymnasium + SB3) |
 | 7 ✅ | Dashboard completo: heatmaps, equity, drawdown, ranking, logs |
-| 8 | Administración (auth, roles, API keys) y ejecución paper/live vía OANDA |
+| 8 ✅ | Administración (auth, roles, API keys) y ejecución paper/live vía OANDA |

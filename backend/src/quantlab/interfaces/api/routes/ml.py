@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from quantlab.domain.market import Symbol, Timeframe
 from quantlab.domain.ml import ML_ALGORITHMS, RL_ALGORITHMS, RL_TARGET, MlModel, ModelKind
 from quantlab.domain.optimization import StudyStatus
-from quantlab.interfaces.api.deps import ContainerDep
+from quantlab.interfaces.api.deps import AdminUser, ContainerDep
 from quantlab.ml.labels import ALL_TARGETS
 
 router = APIRouter(prefix="/ml/models", tags=["ml"])
@@ -60,7 +60,7 @@ class ModelOut(BaseModel):
 
 
 @router.post("", response_model=ModelOut, status_code=status.HTTP_202_ACCEPTED)
-async def create_model(request: ModelCreate, container: ContainerDep) -> ModelOut:
+async def create_model(request: ModelCreate, container: ContainerDep, _: AdminUser) -> ModelOut:
     """Register a model and queue its training on a worker."""
     if request.kind == ModelKind.ML:
         if request.target not in ALL_TARGETS:

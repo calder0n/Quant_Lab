@@ -10,7 +10,7 @@ from quantlab.domain.backtest import BacktestMetrics
 from quantlab.domain.market import Symbol, Timeframe
 from quantlab.domain.objective import InvalidObjectiveError, ObjectiveConfig
 from quantlab.domain.optimization import OptimizationStudy, OptimizationTrial, StudyStatus
-from quantlab.interfaces.api.deps import ContainerDep
+from quantlab.interfaces.api.deps import AdminUser, ContainerDep
 from quantlab.strategies.base import ParamValue
 from quantlab.strategies.registry import UnknownStrategyError
 
@@ -94,7 +94,7 @@ class TrialOut(BaseModel):
 
 
 @router.post("", response_model=StudyOut, status_code=status.HTTP_202_ACCEPTED)
-async def create_study(request: StudyCreate, container: ContainerDep) -> StudyOut:
+async def create_study(request: StudyCreate, container: ContainerDep, _: AdminUser) -> StudyOut:
     """Persist a study and queue it for execution by a worker."""
     try:
         container.strategy_registry.get(request.strategy_id)

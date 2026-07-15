@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from quantlab.domain.broker import OANDA, BrokerCredentials, BrokerEnvironment
 from quantlab.infrastructure.brokers.oanda.verification import verify_credentials
-from quantlab.interfaces.api.deps import ContainerDep
+from quantlab.interfaces.api.deps import AdminUser, ContainerDep
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -79,7 +79,7 @@ async def get_broker_settings(container: ContainerDep) -> BrokerSettingsOut:
 
 @router.put("/broker", response_model=BrokerSettingsOut)
 async def update_broker_settings(
-    body: BrokerSettingsIn, container: ContainerDep
+    body: BrokerSettingsIn, container: ContainerDep, _: AdminUser
 ) -> BrokerSettingsOut:
     """Store credentials in the database; they override environment variables."""
     async with container.broker_settings_repository() as repo:
@@ -94,7 +94,7 @@ async def update_broker_settings(
 
 
 @router.delete("/broker", response_model=BrokerSettingsOut)
-async def delete_broker_settings(container: ContainerDep) -> BrokerSettingsOut:
+async def delete_broker_settings(container: ContainerDep, _: AdminUser) -> BrokerSettingsOut:
     """Remove portal-stored credentials (environment variables apply again)."""
     async with container.broker_settings_repository() as repo:
         await repo.delete(OANDA)

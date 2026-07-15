@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { apiFetch } from "../lib/api";
+
 export type StrategyInfo = {
   strategy_id: string;
   name: string;
@@ -21,7 +23,7 @@ export default function StrategiesPanel() {
   const [strategies, setStrategies] = useState<StrategyInfo[] | null>(null);
 
   useEffect(() => {
-    fetch("/api/backend/strategies", { cache: "no-store" })
+    apiFetch("/strategies", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then(setStrategies)
       .catch(() => setStrategies(null));

@@ -18,19 +18,24 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from quantlab.application.event_bus import EventBus, InMemoryEventBus
 from quantlab.application.ports import (
+    AuthRepository,
     BacktestEngine,
     BrokerSettingsRepository,
     CandleStore,
     DatasetRepository,
+    ExecutionBroker,
     MarketDataProvider,
     MlModelRepository,
     OptimizationRepository,
+    TradingStateRepository,
     ValidationRepository,
 )
+from quantlab.application.services.auth import AuthService
 from quantlab.application.services.backtesting import BacktestService
 from quantlab.application.services.data_ingestion import DataIngestionService
 from quantlab.application.services.ml import MlService
 from quantlab.application.services.optimization import OptimizationService
+from quantlab.application.services.trading import TradingService
 from quantlab.application.services.validation import ValidationService
 from quantlab.config import Settings
 from quantlab.domain.broker import OANDA, BrokerCredentials
@@ -38,6 +43,10 @@ from quantlab.infrastructure.brokers.oanda.client import OandaClient
 from quantlab.infrastructure.brokers.oanda.market_data import OandaMarketDataProvider
 from quantlab.infrastructure.cache.redis import create_redis
 from quantlab.infrastructure.data.parquet_store import ParquetCandleStore
+from quantlab.infrastructure.db.repositories.auth import (
+    SqlAlchemyAuthRepository,
+    SqlAlchemyTradingStateRepository,
+)
 from quantlab.infrastructure.db.repositories.broker_settings import (
     SqlAlchemyBrokerSettingsRepository,
 )
@@ -48,6 +57,7 @@ from quantlab.infrastructure.db.repositories.optimization import (
 )
 from quantlab.infrastructure.db.repositories.validation import SqlAlchemyValidationRepository
 from quantlab.infrastructure.db.session import create_engine, create_session_factory
+from quantlab.infrastructure.security import fernet_from_secret
 from quantlab.strategies.registry import StrategyRegistry
 
 if TYPE_CHECKING:
@@ -75,6 +85,8 @@ class Container:
         self._optimization_service: OptimizationService | None = None
         self._validation_service: ValidationService | None = None
         self._ml_service: MlService | None = None
+        self._auth_service: AuthService | None = None
+        self._trading_service: TradingService | None = None
         self._arq_pool: ArqRedis | None = None
 
     @property
@@ -108,8 +120,9 @@ class Container:
     @asynccontextmanager
     async def broker_settings_repository(self) -> AsyncIterator[BrokerSettingsRepository]:
         """Open a transactional scope over the broker credentials store."""
+        fernet = fernet_from_secret(self._settings.secret_key)
         async with self.session_factory() as session, session.begin():
-            yield SqlAlchemyBrokerSettingsRepository(session)
+            yield SqlAlchemyBrokerSettingsRepository(session, fernet=fernet)
 
     async def oanda_credentials(self) -> BrokerCredentials:
         """Resolve OANDA credentials: portal-configured (DB) wins over environment."""
@@ -256,6 +269,51 @@ class Container:
                 artifacts_dir=self._settings.data_dir / "models",
             )
         return self._ml_service
+
+    @asynccontextmanager
+    async def auth_repository(self) -> AsyncIterator[AuthRepository]:
+        """Open a transactional scope over users and API keys."""
+        async with self.session_factory() as session, session.begin():
+            yield SqlAlchemyAuthRepository(session)
+
+    @property
+    def auth_service(self) -> AuthService:
+        if self._auth_service is None:
+            self._auth_service = AuthService(
+                repositories=self.auth_repository,
+                secret_key=self._settings.secret_key,
+                token_ttl_minutes=self._settings.access_token_ttl_minutes,
+            )
+        return self._auth_service
+
+    @asynccontextmanager
+    async def trading_state_repository(self) -> AsyncIterator[TradingStateRepository]:
+        """Open a transactional scope over the trading kill switch."""
+        async with self.session_factory() as session, session.begin():
+            yield SqlAlchemyTradingStateRepository(session)
+
+    async def execution_broker(self) -> ExecutionBroker:
+        """OANDA execution adapter for the currently configured account."""
+        from quantlab.infrastructure.brokers.oanda.execution import OandaExecutionBroker
+
+        credentials = await self.oanda_credentials()
+        if not credentials.configured or not credentials.account_id:
+            raise ValueError("OANDA credentials with an account id are required for trading.")
+        client = OandaClient(api_token=credentials.api_token, environment=credentials.environment)
+        return OandaExecutionBroker(client, credentials.account_id)
+
+    @property
+    def trading_service(self) -> TradingService:
+        if self._trading_service is None:
+            self._trading_service = TradingService(
+                states=self.trading_state_repository,
+                broker_factory=self.execution_broker,
+                credentials_resolver=self.oanda_credentials,
+                registry=self.strategy_registry,
+                market_data=self.market_data_provider,
+                event_bus=self.event_bus,
+            )
+        return self._trading_service
 
     async def enqueue_training(self, model_id: uuid.UUID) -> None:
         """Queue one model training for execution by a worker."""

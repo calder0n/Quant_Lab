@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { apiFetch } from "../lib/api";
+
 import PlotlyChart from "./PlotlyChart";
 
 type HeatmapCell = { symbol: string; timeframe: string; best_score: number; studies: number };
@@ -33,8 +35,8 @@ export default function ResultsPanel() {
   const refresh = useCallback(async () => {
     try {
       const [heatmapRes, rankingRes] = await Promise.all([
-        fetch("/api/backend/results/heatmap", { cache: "no-store" }),
-        fetch("/api/backend/results/ranking?limit=10", { cache: "no-store" }),
+        apiFetch("/results/heatmap", { cache: "no-store" }),
+        apiFetch("/results/ranking?limit=10", { cache: "no-store" }),
       ]);
       if (heatmapRes.ok) setCells(await heatmapRes.json());
       if (rankingRes.ok) setRanking(await rankingRes.json());

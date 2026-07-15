@@ -13,12 +13,14 @@ from pathlib import Path
 
 import pandas as pd
 
+from quantlab.domain.auth import ApiKey, User
 from quantlab.domain.backtest import BacktestResult, CostModel, OrderPlan
 from quantlab.domain.broker import BrokerCredentials
 from quantlab.domain.datasets import Dataset
 from quantlab.domain.market import Symbol, Timeframe
 from quantlab.domain.ml import MlModel
 from quantlab.domain.optimization import OptimizationStudy, OptimizationTrial
+from quantlab.domain.trading import AccountSummary, OrderResult, Position, TradingState
 from quantlab.domain.validation import ValidationRun
 from quantlab.strategies.base import ParameterSpec, ParamValue
 
@@ -175,6 +177,63 @@ class MlModelRepository(ABC):
 
     @abstractmethod
     async def update(self, model: MlModel) -> MlModel: ...
+
+
+class AuthRepository(ABC):
+    """Persistence port for users and API keys."""
+
+    @abstractmethod
+    async def count_users(self) -> int: ...
+
+    @abstractmethod
+    async def get_user(self, username: str) -> User | None: ...
+
+    @abstractmethod
+    async def add_user(self, user: User) -> User: ...
+
+    @abstractmethod
+    async def list_users(self) -> list[User]: ...
+
+    @abstractmethod
+    async def add_api_key(self, api_key: ApiKey) -> ApiKey: ...
+
+    @abstractmethod
+    async def find_api_key(self, key_hash: str) -> tuple[ApiKey, User] | None: ...
+
+    @abstractmethod
+    async def list_api_keys(self, user_id: uuid.UUID) -> list[ApiKey]: ...
+
+
+class TradingStateRepository(ABC):
+    """Persistence port for the trading kill switch."""
+
+    @abstractmethod
+    async def get(self) -> TradingState: ...
+
+    @abstractmethod
+    async def set_enabled(self, enabled: bool) -> TradingState: ...
+
+
+class ExecutionBroker(ABC):
+    """Order-execution port; one adapter per broker (OANDA today)."""
+
+    @abstractmethod
+    async def account_summary(self) -> AccountSummary: ...
+
+    @abstractmethod
+    async def open_positions(self) -> list[Position]: ...
+
+    @abstractmethod
+    async def place_market_order(
+        self,
+        symbol: Symbol,
+        units: float,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+    ) -> OrderResult: ...
+
+    @abstractmethod
+    async def close_position(self, symbol: Symbol) -> OrderResult: ...
 
 
 class BrokerSettingsRepository(ABC):

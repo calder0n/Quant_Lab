@@ -2,6 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 
+import { apiFetch } from "../lib/api";
+
 type StrategyOption = { strategy_id: string; name: string };
 type DatasetOption = { symbol: string; timeframe: string; status: string };
 
@@ -57,7 +59,7 @@ export default function OptimizationsPanel() {
   const [topTrials, setTopTrials] = useState<Record<string, Trial[]>>({});
 
   useEffect(() => {
-    fetch("/api/backend/strategies", { cache: "no-store" })
+    apiFetch("/strategies", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : []))
       .then((list: StrategyOption[]) => {
         setStrategies(list);
@@ -69,9 +71,9 @@ export default function OptimizationsPanel() {
   const refresh = useCallback(async () => {
     try {
       const [studiesRes, workersRes, datasetsRes] = await Promise.all([
-        fetch("/api/backend/optimizations", { cache: "no-store" }),
-        fetch("/api/backend/workers", { cache: "no-store" }),
-        fetch("/api/backend/datasets", { cache: "no-store" }),
+        apiFetch("/optimizations", { cache: "no-store" }),
+        apiFetch("/workers", { cache: "no-store" }),
+        apiFetch("/datasets", { cache: "no-store" }),
       ]);
       if (studiesRes.ok) setStudies(await studiesRes.json());
       if (workersRes.ok) setWorkers(await workersRes.json());
@@ -101,7 +103,7 @@ export default function OptimizationsPanel() {
     setLaunching(true);
     setError(null);
     try {
-      const response = await fetch("/api/backend/optimizations", {
+      const response = await apiFetch("/optimizations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -129,7 +131,7 @@ export default function OptimizationsPanel() {
     }
     setExpanded(studyId);
     try {
-      const response = await fetch(`/api/backend/optimizations/${studyId}/trials?limit=10`, {
+      const response = await apiFetch(`/optimizations/${studyId}/trials?limit=10`, {
         cache: "no-store",
       });
       if (response.ok) setTopTrials((prev) => ({ ...prev, [studyId]: [] }));

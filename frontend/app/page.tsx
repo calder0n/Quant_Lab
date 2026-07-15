@@ -5,11 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 import BacktestPanel from "./components/BacktestPanel";
 import BrokerSettingsPanel from "./components/BrokerSettingsPanel";
 import DatasetsPanel from "./components/DatasetsPanel";
+import LoginGate from "./components/LoginGate";
 import LogsPanel from "./components/LogsPanel";
 import MlPanel from "./components/MlPanel";
 import OptimizationsPanel from "./components/OptimizationsPanel";
 import ResultsPanel from "./components/ResultsPanel";
 import StrategiesPanel from "./components/StrategiesPanel";
+import TradingPanel from "./components/TradingPanel";
 import ValidationsPanel from "./components/ValidationsPanel";
 
 type ComponentStatus = {
@@ -103,6 +105,7 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-16">
+      <LoginGate>
       <header className="mb-10">
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold tracking-tight">QuantLab</h1>
@@ -157,8 +160,10 @@ export default function Home() {
       <ResultsPanel />
       <ValidationsPanel />
       <MlPanel />
+      <TradingPanel />
       <BacktestPanel />
       <LogsPanel />
+      </LoginGate>
     </main>
   );
 }

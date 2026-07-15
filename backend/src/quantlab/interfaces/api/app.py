@@ -8,7 +8,7 @@ tests build isolated instances with custom settings.
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from quantlab import __version__
 from quantlab.config import Settings
@@ -17,7 +17,9 @@ from quantlab.infrastructure.logging.redis_handler import (
     setup_dashboard_logging,
     teardown_dashboard_logging,
 )
+from quantlab.interfaces.api.deps import get_current_user
 from quantlab.interfaces.api.routes import (
+    auth,
     backtests,
     datasets,
     health,
@@ -25,6 +27,7 @@ from quantlab.interfaces.api.routes import (
     optimizations,
     results,
     strategies,
+    trading,
     validations,
     workers,
 )
@@ -52,14 +55,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         debug=app_settings.debug,
         lifespan=lifespan,
     )
+    # Public: health (docker/uptime checks) and the auth endpoints themselves.
     app.include_router(health.router, prefix=app_settings.api_v1_prefix)
-    app.include_router(datasets.router, prefix=app_settings.api_v1_prefix)
-    app.include_router(strategies.router, prefix=app_settings.api_v1_prefix)
-    app.include_router(backtests.router, prefix=app_settings.api_v1_prefix)
-    app.include_router(settings_routes.router, prefix=app_settings.api_v1_prefix)
-    app.include_router(optimizations.router, prefix=app_settings.api_v1_prefix)
-    app.include_router(validations.router, prefix=app_settings.api_v1_prefix)
-    app.include_router(ml.router, prefix=app_settings.api_v1_prefix)
-    app.include_router(results.router, prefix=app_settings.api_v1_prefix)
-    app.include_router(workers.router, prefix=app_settings.api_v1_prefix)
+    app.include_router(auth.router, prefix=app_settings.api_v1_prefix)
+    # Everything else requires an authenticated user (admin for mutations).
+    authenticated = [Depends(get_current_user)]
+    for router in (
+        datasets.router,
+        strategies.router,
+        backtests.router,
+        settings_routes.router,
+        optimizations.router,
+        validations.router,
+        ml.router,
+        results.router,
+        workers.router,
+        trading.router,
+    ):
+        app.include_router(router, prefix=app_settings.api_v1_prefix, dependencies=authenticated)
     return app

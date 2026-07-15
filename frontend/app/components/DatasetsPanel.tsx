@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { apiFetch } from "../lib/api";
+
 type Dataset = {
   id: string;
   symbol: string;
@@ -35,7 +37,7 @@ export default function DatasetsPanel() {
 
   const fetchDatasets = useCallback(async () => {
     try {
-      const response = await fetch("/api/backend/datasets", { cache: "no-store" });
+      const response = await apiFetch("/datasets", { cache: "no-store" });
       if (response.ok) setDatasets(await response.json());
     } catch {
       // backend unreachable: keep last known state
@@ -52,7 +54,7 @@ export default function DatasetsPanel() {
     setSyncing(true);
     setSyncMessage(null);
     try {
-      const response = await fetch("/api/backend/datasets/sync", {
+      const response = await apiFetch("/datasets/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),

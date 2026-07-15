@@ -48,7 +48,9 @@ def build_client(app: FastAPI, container: SettingsStubContainer) -> httpx.AsyncC
 
 
 def make_container(oanda_env_token: str = "") -> tuple[FastAPI, SettingsStubContainer]:
-    settings = Settings(_env_file=None, environment="test", oanda_api_token=oanda_env_token)
+    settings = Settings(
+        _env_file=None, environment="test", auth_enabled=False, oanda_api_token=oanda_env_token
+    )
     return create_app(settings), SettingsStubContainer(settings)
 
 

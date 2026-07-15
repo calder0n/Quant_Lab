@@ -77,5 +77,61 @@ class OandaClient:
         accounts: list[dict[str, Any]] = response.json()["accounts"]
         return accounts
 
+    async def get_account_summary(self, account_id: str) -> dict[str, Any]:
+        response = await self._http.get(f"/v3/accounts/{account_id}/summary")
+        if response.status_code != httpx.codes.OK:
+            raise OandaApiError(response.status_code, response.text)
+        summary: dict[str, Any] = response.json()["account"]
+        return summary
+
+    async def get_open_positions(self, account_id: str) -> list[dict[str, Any]]:
+        response = await self._http.get(f"/v3/accounts/{account_id}/openPositions")
+        if response.status_code != httpx.codes.OK:
+            raise OandaApiError(response.status_code, response.text)
+        positions: list[dict[str, Any]] = response.json()["positions"]
+        return positions
+
+    async def create_market_order(
+        self,
+        account_id: str,
+        instrument: str,
+        units: float,
+        stop_loss_price: str | None = None,
+        take_profit_price: str | None = None,
+    ) -> dict[str, Any]:
+        """Submit a market order; SL/TP attach to the resulting position on fill."""
+        order: dict[str, Any] = {
+            "type": "MARKET",
+            "instrument": instrument,
+            "units": str(int(units)),
+            "timeInForce": "FOK",
+            "positionFill": "DEFAULT",
+        }
+        if stop_loss_price is not None:
+            order["stopLossOnFill"] = {"price": stop_loss_price}
+        if take_profit_price is not None:
+            order["takeProfitOnFill"] = {"price": take_profit_price}
+        response = await self._http.post(f"/v3/accounts/{account_id}/orders", json={"order": order})
+        if response.status_code not in (httpx.codes.OK, httpx.codes.CREATED):
+            raise OandaApiError(response.status_code, response.text)
+        result: dict[str, Any] = response.json()
+        return result
+
+    async def close_position(
+        self, account_id: str, instrument: str, long_units: bool, short_units: bool
+    ) -> dict[str, Any]:
+        payload: dict[str, str] = {}
+        if long_units:
+            payload["longUnits"] = "ALL"
+        if short_units:
+            payload["shortUnits"] = "ALL"
+        response = await self._http.put(
+            f"/v3/accounts/{account_id}/positions/{instrument}/close", json=payload
+        )
+        if response.status_code != httpx.codes.OK:
+            raise OandaApiError(response.status_code, response.text)
+        result: dict[str, Any] = response.json()
+        return result
+
     async def aclose(self) -> None:
         await self._http.aclose()

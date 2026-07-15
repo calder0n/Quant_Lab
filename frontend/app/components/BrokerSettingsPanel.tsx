@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { apiFetch } from "../lib/api";
+
 type BrokerSettings = {
   broker: string;
   configured: boolean;
@@ -29,7 +31,7 @@ export default function BrokerSettingsPanel() {
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/backend/settings/broker", { cache: "no-store" });
+      const response = await apiFetch("/settings/broker", { cache: "no-store" });
       if (!response.ok) return;
       const body: BrokerSettings = await response.json();
       setCurrent(body);
@@ -50,7 +52,7 @@ export default function BrokerSettingsPanel() {
     try {
       const payload: Record<string, string> = { account_id: accountId, environment };
       if (token.trim()) payload.api_token = token.trim();
-      const response = await fetch("/api/backend/settings/broker", {
+      const response = await apiFetch("/settings/broker", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -74,7 +76,7 @@ export default function BrokerSettingsPanel() {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/backend/settings/broker/test", { method: "POST" });
+      const response = await apiFetch("/settings/broker/test", { method: "POST" });
       const body: TestResult = await response.json();
       const accounts = body.accounts.length > 0 ? ` Accounts: ${body.accounts.join(", ")}` : "";
       setMessage({ ok: body.ok, text: body.detail + (body.ok ? accounts : "") });
@@ -89,7 +91,7 @@ export default function BrokerSettingsPanel() {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/backend/settings/broker", { method: "DELETE" });
+      const response = await apiFetch("/settings/broker", { method: "DELETE" });
       if (response.ok) {
         setCurrent(await response.json());
         setToken("");
