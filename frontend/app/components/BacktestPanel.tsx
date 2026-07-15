@@ -14,7 +14,14 @@ type ParamSpec = {
   high: number | null;
   step: number | null;
   choices: string[] | null;
+  group: string;
 };
+
+const PARAM_GROUPS: { key: string; label: string }[] = [
+  { key: "strategy", label: "Strategy parameters" },
+  { key: "risk", label: "Risk & exits" },
+  { key: "filter", label: "Entry filters — enable/disable each" },
+];
 
 type StrategyInfo = {
   strategy_id: string;
@@ -366,15 +373,32 @@ export default function BacktestPanel() {
               </span>
             </button>
             {showParams && (
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-slate-800 p-4 sm:grid-cols-3 lg:grid-cols-4">
-                {strategy.parameters.map((spec) => (
-                  <ParamField
-                    key={spec.name}
-                    spec={spec}
-                    value={params[spec.name] ?? spec.default}
-                    onChange={(v) => setParam(spec.name, v)}
-                  />
-                ))}
+              <div className="border-t border-slate-800 p-4">
+                {PARAM_GROUPS.map(({ key, label }) => {
+                  const specs = strategy.parameters.filter((p) => (p.group ?? "strategy") === key);
+                  if (specs.length === 0) return null;
+                  return (
+                    <div key={key} className="mb-4 last:mb-0">
+                      <p
+                        className={`mb-2 font-mono text-[10px] uppercase tracking-wider ${
+                          key === "filter" ? "text-sky-400" : "text-slate-500"
+                        }`}
+                      >
+                        {label}
+                      </p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
+                        {specs.map((spec) => (
+                          <ParamField
+                            key={spec.name}
+                            spec={spec}
+                            value={params[spec.name] ?? spec.default}
+                            onChange={(v) => setParam(spec.name, v)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

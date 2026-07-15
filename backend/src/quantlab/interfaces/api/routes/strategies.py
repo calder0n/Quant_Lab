@@ -17,6 +17,7 @@ class ParameterOut(BaseModel):
     high: float | None
     step: float | None
     choices: tuple[str, ...] | None
+    group: str
 
     @classmethod
     def from_spec(cls, spec: ParameterSpec) -> "ParameterOut":
@@ -28,6 +29,7 @@ class ParameterOut(BaseModel):
             high=spec.high,
             step=spec.step,
             choices=spec.choices,
+            group=spec.group,
         )
 
 

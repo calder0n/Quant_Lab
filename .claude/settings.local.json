@@ -60,7 +60,9 @@
       "Bash(git commit -m 'Phase 8: administration \\(auth/roles/API keys\\) + OANDA paper/live execution *)",
       "Bash(git commit -m 'Add user guide \\(GUIA.md\\): end-to-end usage manual in Spanish *)",
       "Skill(artifact-design)",
-      "Skill(artifact-design:*)"
+      "Skill(artifact-design:*)",
+      "Bash(echo \"tsc exit: $?\")",
+      "Bash(git commit -m 'Toggleable entry filters per strategy *)"
     ]
   }
 }

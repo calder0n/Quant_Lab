@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from quantlab.domain.backtest import BacktestMetrics
+from quantlab.strategies import indicators as ta
 from quantlab.strategies.base import InvalidParameterError, ParameterSpec, Strategy
 from tests.factories import make_market_data
 
@@ -16,7 +17,9 @@ class DummyStrategy(Strategy):
 
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         entry = data["close"] > data["close"].shift(1)
-        return self._frame(data, long_entry=entry, long_exit=~entry)
+        return self._frame(
+            data, long_entry=entry, long_exit=~entry, short_entry=~entry, short_exit=entry
+        )
 
 
 def test_metadata_includes_own_and_risk_params() -> None:
@@ -50,26 +53,63 @@ def test_int_params_are_coerced() -> None:
 
 def test_session_filter_blocks_entries_outside_hours() -> None:
     data = make_market_data(48)
-    strategy = DummyStrategy(session_start=8, session_end=12)
+    strategy = DummyStrategy(use_session_filter=True, session_start=8, session_end=12)
     signals = strategy.generate_signals(data)
     entry_hours = data.index[signals["long_entry"]].hour
     assert ((entry_hours >= 8) & (entry_hours <= 12)).all()
 
 
+def test_session_filter_is_off_by_default() -> None:
+    data = make_market_data(48)
+    off = DummyStrategy(session_start=8, session_end=12)  # toggle not set → no effect
+    on = DummyStrategy(use_session_filter=True, session_start=8, session_end=12)
+    assert (
+        off.generate_signals(data)["long_entry"].sum()
+        > on.generate_signals(data)["long_entry"].sum()
+    )
+
+
 def test_session_filter_supports_overnight_wrap() -> None:
     data = make_market_data(48)
-    strategy = DummyStrategy(session_start=22, session_end=2)
+    strategy = DummyStrategy(use_session_filter=True, session_start=22, session_end=2)
     signals = strategy.generate_signals(data)
     entry_hours = data.index[signals["long_entry"]].hour
     assert ((entry_hours >= 22) | (entry_hours <= 2)).all()
 
 
-def test_spread_filter_blocks_abnormal_spread() -> None:
+def test_spread_filter_blocks_abnormal_spread_and_can_be_disabled() -> None:
     data = make_market_data(200)
     data.loc[data.index[100], "spread"] = data["spread"].median() * 50
-    strategy = DummyStrategy(max_spread_mult=3.0)
+    # on by default: the spread spike blocks that bar's entry
+    assert not DummyStrategy(max_spread_mult=3.0).generate_signals(data)["long_entry"].iloc[100]
+    # disabling the filter lets the entry through
+    disabled = DummyStrategy(use_spread_filter=False).generate_signals(data)
+    entry_at_spike = data["close"].iloc[100] > data["close"].iloc[99]
+    assert bool(disabled["long_entry"].iloc[100]) == entry_at_spike
+
+
+def test_trend_filter_is_directional() -> None:
+    data = make_market_data(400)
+    trend = ta.ema(data["close"], 200)
+    strategy = DummyStrategy(use_trend_filter=True, trend_ema=200)
     signals = strategy.generate_signals(data)
-    assert not signals["long_entry"].iloc[100]
+    # longs only fire above the trend EMA, shorts only below it
+    assert (data["close"][signals["long_entry"]] > trend[signals["long_entry"]]).all()
+    assert (data["close"][signals["short_entry"]] < trend[signals["short_entry"]]).all()
+
+
+def test_volatility_filter_blocks_quiet_bars() -> None:
+    data = make_market_data(300)
+    permissive = DummyStrategy(use_volatility_filter=True, min_atr_pct=0.0)
+    strict = DummyStrategy(use_volatility_filter=True, min_atr_pct=0.02)  # 200 bps: very high
+    assert permissive.generate_signals(data)["long_entry"].sum() > 0
+    assert strict.generate_signals(data)["long_entry"].sum() == 0  # nothing that volatile
+
+
+def test_trend_filter_adds_a_chart_overlay() -> None:
+    data = make_market_data(300)
+    assert "Trend EMA" not in DummyStrategy().chart_overlays(data)
+    assert "Trend EMA" in DummyStrategy(use_trend_filter=True).chart_overlays(data)
 
 
 def test_default_orders_scale_with_atr_params() -> None:

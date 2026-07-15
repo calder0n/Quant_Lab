@@ -32,6 +32,7 @@ class ParameterSpec:
     high: float | None = None
     step: float | None = None
     choices: tuple[str, ...] | None = None
+    group: str = "strategy"  # "strategy" | "risk" | "filter" — for UI grouping
 
 
 @dataclass(frozen=True)
@@ -46,14 +47,26 @@ class StrategyMetadata:
 
 
 # Risk/filter parameters shared by every strategy. Strategies add their own on top.
+# Each entry filter has its own on/off toggle so it can be enabled or disabled
+# independently; a filter's numeric parameters only take effect when its toggle is on.
 RISK_PARAMS: tuple[ParameterSpec, ...] = (
-    ParameterSpec("atr_period", "int", 14, 5, 50),
-    ParameterSpec("sl_atr", "float", 2.0, 0.5, 10.0),
-    ParameterSpec("tp_atr", "float", 3.0, 0.5, 15.0),
-    ParameterSpec("use_trailing", "bool", False),
-    ParameterSpec("session_start", "int", 0, 0, 23),
-    ParameterSpec("session_end", "int", 23, 0, 23),
-    ParameterSpec("max_spread_mult", "float", 3.0, 1.0, 10.0),
+    ParameterSpec("atr_period", "int", 14, 5, 50, group="risk"),
+    ParameterSpec("sl_atr", "float", 2.0, 0.5, 10.0, group="risk"),
+    ParameterSpec("tp_atr", "float", 3.0, 0.5, 15.0, group="risk"),
+    ParameterSpec("use_trailing", "bool", False, group="risk"),
+    # Session-hour filter: only enter between session_start and session_end (UTC).
+    ParameterSpec("use_session_filter", "bool", False, group="filter"),
+    ParameterSpec("session_start", "int", 0, 0, 23, group="filter"),
+    ParameterSpec("session_end", "int", 23, 0, 23, group="filter"),
+    # Abnormal-spread filter: skip entries when the spread spikes above normal.
+    ParameterSpec("use_spread_filter", "bool", True, group="filter"),
+    ParameterSpec("max_spread_mult", "float", 3.0, 1.0, 10.0, group="filter"),
+    # Trend filter (directional): longs only above the trend EMA, shorts only below.
+    ParameterSpec("use_trend_filter", "bool", False, group="filter"),
+    ParameterSpec("trend_ema", "int", 200, 20, 400, group="filter"),
+    # Minimum-volatility filter: skip entries when ATR/price is below the threshold.
+    ParameterSpec("use_volatility_filter", "bool", False, group="filter"),
+    ParameterSpec("min_atr_pct", "float", 0.0005, 0.0, 0.02, step=0.0001, group="filter"),
 )
 
 
@@ -161,7 +174,7 @@ class Strategy(ABC):
         short_entry: pd.Series | None = None,
         short_exit: pd.Series | None = None,
     ) -> pd.DataFrame:
-        """Assemble the signal frame, applying the session and spread filters."""
+        """Assemble the signal frame, applying whichever entry filters are enabled."""
 
         def clean(series: pd.Series | None) -> pd.Series:
             if series is None:
@@ -177,26 +190,43 @@ class Strategy(ABC):
             }
         )
         allowed = self._entries_allowed(data)
-        frame["long_entry"] &= allowed
-        frame["short_entry"] &= allowed
+        long_ok, short_ok = allowed.copy(), allowed.copy()
+        if bool(self.params["use_trend_filter"]):
+            trend = ta.ema(data["close"], int(self.params["trend_ema"]))
+            long_ok &= data["close"] > trend
+            short_ok &= data["close"] < trend
+        frame["long_entry"] &= long_ok
+        frame["short_entry"] &= short_ok
         return frame
 
     def _entries_allowed(self, data: pd.DataFrame) -> pd.Series:
-        """Session-hour filter plus abnormal-spread filter (entries only)."""
+        """Symmetric entry filters (applied to both long and short) that are enabled."""
         index = data.index
         assert isinstance(index, pd.DatetimeIndex)
-        start = int(self.params["session_start"])
-        end = int(self.params["session_end"])
-        hours = pd.Series(index.hour, index=index)
-        if start <= end:
-            allowed = (hours >= start) & (hours <= end)
-        else:  # session wraps around midnight
-            allowed = (hours >= start) | (hours <= end)
-        if "spread" in data.columns:
+        allowed = pd.Series(True, index=index)
+        if bool(self.params["use_session_filter"]):
+            start = int(self.params["session_start"])
+            end = int(self.params["session_end"])
+            hours = pd.Series(index.hour, index=index)
+            if start <= end:
+                allowed &= (hours >= start) & (hours <= end)
+            else:  # session wraps around midnight
+                allowed &= (hours >= start) | (hours <= end)
+        if bool(self.params["use_spread_filter"]) and "spread" in data.columns:
             typical_spread = data["spread"].rolling(500, min_periods=20).median()
             spread_ok = data["spread"] <= float(self.params["max_spread_mult"]) * typical_spread
             allowed &= spread_ok.fillna(True)
+        if bool(self.params["use_volatility_filter"]):
+            atr_pct = self.atr(data) / data["close"]
+            allowed &= (atr_pct >= float(self.params["min_atr_pct"])).fillna(False)
         return allowed
+
+    def chart_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        """Every price-scale line to draw on the chart: strategy logic + active filters."""
+        overlays = dict(self.plot_overlays(data))
+        if bool(self.params["use_trend_filter"]):
+            overlays["Trend EMA"] = ta.ema(data["close"], int(self.params["trend_ema"]))
+        return overlays
 
     def atr(self, data: pd.DataFrame) -> pd.Series:
         return ta.atr(data, int(self.params["atr_period"]))

@@ -31,7 +31,7 @@ def build_chart(
         name: [
             None if pd.isna(value) else round(float(value), 6) for value in series.reindex(index)
         ]
-        for name, series in strategy.plot_overlays(data).items()
+        for name, series in strategy.chart_overlays(data).items()
     }
     markers: dict[str, list[ChartMarker]] = {}
     for column in SIGNAL_COLUMNS:
