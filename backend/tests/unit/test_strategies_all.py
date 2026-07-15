@@ -77,3 +77,29 @@ def test_strategy_is_deterministic(strategy_id: str, market_data: pd.DataFrame) 
 def test_every_strategy_subclasses_the_contract() -> None:
     for strategy_id in ALL_IDS:
         assert issubclass(REGISTRY.get(strategy_id), Strategy)
+
+
+@pytest.mark.parametrize("strategy_id", ALL_IDS)
+def test_plot_overlays_are_price_scale_and_aligned(
+    strategy_id: str, market_data: pd.DataFrame
+) -> None:
+    """Every overlay must align to the data index and sit near the price range."""
+    strategy = REGISTRY.create(strategy_id)
+    overlays = strategy.plot_overlays(market_data)
+    price_low, price_high = market_data["low"].min(), market_data["high"].max()
+    for name, series in overlays.items():
+        assert series.index.equals(market_data.index), name
+        valid = series.dropna()
+        if not valid.empty:
+            # price-scale: overlays live within a sane band around the candles
+            assert valid.min() >= price_low * 0.5, name
+            assert valid.max() <= price_high * 1.5, name
+
+
+def test_overlay_strategies_expose_indicators() -> None:
+    data = make_market_data(400)
+    assert set(REGISTRY.create("ema_cross").plot_overlays(data)) == {"EMA fast", "EMA slow"}
+    assert "BB upper" in REGISTRY.create("bollinger").plot_overlays(data)
+    assert "Donchian high" in REGISTRY.create("donchian").plot_overlays(data)
+    # oscillator strategies legitimately expose none (markers carry the logic)
+    assert REGISTRY.create("rsi").plot_overlays(data) == {}

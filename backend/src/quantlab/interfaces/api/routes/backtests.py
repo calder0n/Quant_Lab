@@ -27,11 +27,27 @@ class BacktestRequest(BaseModel):
     commission_pct: float = Field(0.0, ge=0.0, le=0.01)
     slippage_pct: float = Field(0.0, ge=0.0, le=0.01)
     use_spread: bool = True
+    chart_bars: int = Field(400, ge=0, le=3000)
 
 
 class EquityPoint(BaseModel):
     time: datetime
     value: float
+
+
+class MarkerOut(BaseModel):
+    time: str
+    price: float
+
+
+class ChartOut(BaseModel):
+    time: list[str]
+    open: list[float]
+    high: list[float]
+    low: list[float]
+    close: list[float]
+    overlays: dict[str, list[float | None]]
+    markers: dict[str, list[MarkerOut]]
 
 
 class BacktestResponse(BaseModel):
@@ -43,6 +59,7 @@ class BacktestResponse(BaseModel):
     metrics: BacktestMetrics
     equity: list[EquityPoint]
     trade_returns: list[float]
+    chart: ChartOut | None = None
 
     @classmethod
     def from_result(cls, request: BacktestRequest, result: BacktestResult) -> "BacktestResponse":
@@ -51,6 +68,20 @@ class BacktestResponse(BaseModel):
             EquityPoint(time=moment, value=float(value))
             for moment, value in zip(index.to_pydatetime(), result.equity.to_numpy(), strict=True)
         ]
+        chart = None
+        if result.chart is not None:
+            chart = ChartOut(
+                time=result.chart.time,
+                open=result.chart.open,
+                high=result.chart.high,
+                low=result.chart.low,
+                close=result.chart.close,
+                overlays=result.chart.overlays,
+                markers={
+                    name: [MarkerOut(time=m.time, price=m.price) for m in points]
+                    for name, points in result.chart.markers.items()
+                },
+            )
         return cls(
             strategy_id=request.strategy_id,
             symbol=request.symbol,
@@ -60,6 +91,7 @@ class BacktestResponse(BaseModel):
             metrics=result.metrics,
             equity=equity,
             trade_returns=result.trade_returns,
+            chart=chart,
         )
 
 
@@ -81,6 +113,7 @@ def run_backtest(
                 slippage_pct=request.slippage_pct,
                 use_spread=request.use_spread,
             ),
+            chart_bars=request.chart_bars,
         )
     except UnknownStrategyError as exc:
         raise HTTPException(

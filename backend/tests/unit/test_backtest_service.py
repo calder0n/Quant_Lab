@@ -49,6 +49,29 @@ def test_run_produces_scored_result(service: tuple[BacktestService, FakeEngine])
     assert result.params["fast_period"] == 12  # defaults echoed back
     assert engine.calls[0]["bars"] == 300
     assert engine.calls[0]["timeframe"] == Timeframe.H1
+    assert result.chart is None  # no chart unless requested
+
+
+def test_run_builds_inspection_chart(service: tuple[BacktestService, FakeEngine]) -> None:
+    backtest_service, _ = service
+    result = backtest_service.run("ema_cross", Symbol.EURUSD, Timeframe.H1, chart_bars=120)
+    chart = result.chart
+    assert chart is not None
+    assert len(chart.time) == len(chart.close) == 120  # windowed to the last N bars
+    assert chart.overlays.keys() == {"EMA fast", "EMA slow"}
+    assert len(chart.overlays["EMA fast"]) == 120
+    assert set(chart.markers) == {"long_entry", "long_exit", "short_entry", "short_exit"}
+    for points in chart.markers.values():
+        for marker in points:
+            assert marker.time in chart.time  # markers land on real candles
+
+
+def test_chart_window_caps_at_available_bars(service: tuple[BacktestService, FakeEngine]) -> None:
+    backtest_service, _ = service  # store holds 300 bars
+    result = backtest_service.run("rsi", Symbol.EURUSD, Timeframe.H1, chart_bars=10_000)
+    assert result.chart is not None
+    assert len(result.chart.time) == 300
+    assert result.chart.overlays == {}  # rsi is an oscillator: markers only
 
 
 def test_run_passes_custom_costs(service: tuple[BacktestService, FakeEngine]) -> None:

@@ -53,12 +53,40 @@ class BacktestMetrics:
     trades: int = 0
 
 
+@dataclass(frozen=True)
+class ChartMarker:
+    """A signal firing on the price chart (entry or exit)."""
+
+    time: str
+    price: float
+
+
+@dataclass
+class BacktestChart:
+    """Price window plus the strategy's own indicator lines and signal markers.
+
+    Lets the dashboard show *why* an entry fired: the candles of the asset, the
+    price-scale indicators/filters the strategy uses (``overlays``) and the exact
+    bars where each signal triggered (``markers``). Built over the most recent
+    ``chart_bars`` bars; the backtest metrics still cover the full range.
+    """
+
+    time: list[str] = field(default_factory=list)
+    open: list[float] = field(default_factory=list)
+    high: list[float] = field(default_factory=list)
+    low: list[float] = field(default_factory=list)
+    close: list[float] = field(default_factory=list)
+    overlays: dict[str, list[float | None]] = field(default_factory=dict)
+    markers: dict[str, list[ChartMarker]] = field(default_factory=dict)
+
+
 @dataclass
 class BacktestResult:
     """Outcome of one strategy execution over one dataset.
 
     ``trade_returns`` holds the net return fraction of each closed trade in
     chronological order; Monte Carlo validation resamples this sequence.
+    ``chart`` is populated only when a price window is requested for inspection.
     """
 
     metrics: BacktestMetrics
@@ -66,3 +94,4 @@ class BacktestResult:
     fitness: float = 0.0
     params: dict[str, float | int | bool | str] = field(default_factory=dict)
     trade_returns: list[float] = field(default_factory=list)
+    chart: BacktestChart | None = None

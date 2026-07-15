@@ -25,3 +25,7 @@ class DonchianBreakout(Strategy):
             short_entry=data["close"] < lower,
             short_exit=ta.cross_above(data["close"], mid),
         )
+
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        upper, lower = ta.donchian(data, int(self.params["channel_period"]))
+        return {"Donchian high": upper, "Donchian low": lower, "Mid": (upper + lower) / 2.0}

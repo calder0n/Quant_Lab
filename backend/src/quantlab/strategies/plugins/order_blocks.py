@@ -24,7 +24,7 @@ class OrderBlocks(Strategy):
         ParameterSpec("validity_bars", "int", 30, 5, 200),
     )
 
-    def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
+    def _zones(self, data: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
         body = ta.candle_body(data)
         displaced = body > float(self.params["displacement_atr"]) * self.atr(data).shift(1)
         bullish_move = displaced & (data["close"] > data["open"])
@@ -34,11 +34,12 @@ class OrderBlocks(Strategy):
         validity = int(self.params["validity_bars"])
 
         # Demand zone top: high of the bearish candle preceding a bullish displacement.
-        demand = data["high"].shift(1).where(bullish_move & previous_bearish)
-        demand = demand.ffill(limit=validity)
-        supply = data["low"].shift(1).where(bearish_move & previous_bullish)
-        supply = supply.ffill(limit=validity)
+        demand = data["high"].shift(1).where(bullish_move & previous_bearish).ffill(limit=validity)
+        supply = data["low"].shift(1).where(bearish_move & previous_bullish).ffill(limit=validity)
+        return demand, supply, bullish_move, bearish_move
 
+    def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
+        demand, supply, bullish_move, bearish_move = self._zones(data)
         touched_demand = (data["low"] <= demand) & (data["close"] > demand)
         touched_supply = (data["high"] >= supply) & (data["close"] < supply)
         return self._frame(
@@ -48,3 +49,7 @@ class OrderBlocks(Strategy):
             short_entry=touched_supply,
             short_exit=bullish_move,
         )
+
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        demand, supply, _, _ = self._zones(data)
+        return {"Demand": demand, "Supply": supply}

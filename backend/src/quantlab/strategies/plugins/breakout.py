@@ -34,3 +34,10 @@ class BufferedBreakout(Strategy):
             short_entry=data["close"] < lowest - buffer,
             short_exit=data["close"] > exit_high,
         )
+
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        lookback = int(self.params["lookback"])
+        return {
+            "Breakout high": data["close"].rolling(lookback).max().shift(1),
+            "Breakout low": data["close"].rolling(lookback).min().shift(1),
+        }

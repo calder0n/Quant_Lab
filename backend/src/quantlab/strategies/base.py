@@ -142,6 +142,15 @@ class Strategy(ABC):
         )
         return score * significance
 
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        """Price-scale indicator lines that explain this strategy's entries.
+
+        Returned series share the price axis and are drawn on top of the candles
+        in the dashboard. Oscillator-based strategies (RSI, MACD, ...) return an
+        empty mapping and rely on the entry/exit markers instead. Default: none.
+        """
+        return {}
+
     # -- helpers for subclasses ------------------------------------------------
 
     def _frame(

@@ -29,3 +29,9 @@ class BollingerReversion(Strategy):
             short_entry=ta.cross_below(data["close"], upper),
             short_exit=ta.cross_below(data["close"], mid),
         )
+
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        lower, mid, upper = ta.bollinger(
+            data["close"], int(self.params["bb_period"]), float(self.params["bb_std"])
+        )
+        return {"BB lower": lower, "BB mid": mid, "BB upper": upper}

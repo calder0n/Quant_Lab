@@ -38,3 +38,6 @@ class VwapReversion(Strategy):
             short_entry=short_entry,
             short_exit=short_exit,
         )
+
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        return {"VWAP": ta.session_vwap(data)}

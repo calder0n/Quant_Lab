@@ -23,18 +23,18 @@ class FairValueGap(Strategy):
         ParameterSpec("validity_bars", "int", 30, 5, 200),
     )
 
-    def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
-        average_range = self.atr(data).shift(1)
-        min_gap = float(self.params["min_gap_atr"]) * average_range
+    def _levels(self, data: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+        min_gap = float(self.params["min_gap_atr"]) * self.atr(data).shift(1)
         validity = int(self.params["validity_bars"])
-
         bullish_gap = (data["low"] - data["high"].shift(2)) > min_gap
         bearish_gap = (data["low"].shift(2) - data["high"]) > min_gap
-
         # Level to retest: top of a bullish gap, bottom of a bearish gap.
         bullish_level = data["low"].where(bullish_gap).ffill(limit=validity)
         bearish_level = data["high"].where(bearish_gap).ffill(limit=validity)
+        return bullish_level, bearish_level, bullish_gap, bearish_gap
 
+    def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
+        bullish_level, bearish_level, bullish_gap, bearish_gap = self._levels(data)
         filled_bullish = (data["low"] <= bullish_level) & (data["close"] > bullish_level)
         filled_bearish = (data["high"] >= bearish_level) & (data["close"] < bearish_level)
         return self._frame(
@@ -44,3 +44,7 @@ class FairValueGap(Strategy):
             short_entry=filled_bearish,
             short_exit=bullish_gap,
         )
+
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        bullish_level, bearish_level, _, _ = self._levels(data)
+        return {"FVG support": bullish_level, "FVG resistance": bearish_level}

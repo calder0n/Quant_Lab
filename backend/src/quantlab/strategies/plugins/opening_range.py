@@ -37,3 +37,12 @@ class OpeningRange(Strategy):
             long_exit=short_entry,
             short_exit=long_entry,
         )
+
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        assert isinstance(data.index, pd.DatetimeIndex)
+        bar_number = ta.bar_number_in_day(data.index)
+        in_range = bar_number < int(self.params["range_bars"])
+        day = data.index.date
+        range_high = data["high"].where(in_range).groupby(day).cummax().groupby(day).ffill()
+        range_low = data["low"].where(in_range).groupby(day).cummin().groupby(day).ffill()
+        return {"OR high": range_high, "OR low": range_low}

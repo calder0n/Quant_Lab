@@ -34,3 +34,10 @@ class SmartMoneyConcepts(Strategy):
             short_entry=bos_down,
             short_exit=bos_up,
         )
+
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        strength = int(self.params["swing_strength"])
+        return {
+            "Swing high": ta.confirmed_swing_high(data, strength),
+            "Swing low": ta.confirmed_swing_low(data, strength),
+        }

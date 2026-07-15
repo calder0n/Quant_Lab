@@ -28,3 +28,9 @@ class EmaCross(Strategy):
         up = ta.cross_above(fast, slow)
         down = ta.cross_below(fast, slow)
         return self._frame(data, long_entry=up, long_exit=down, short_entry=down, short_exit=up)
+
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        return {
+            "EMA fast": ta.ema(data["close"], int(self.params["fast_period"])),
+            "EMA slow": ta.ema(data["close"], int(self.params["slow_period"])),
+        }

@@ -42,3 +42,10 @@ class LiquiditySweep(Strategy):
             short_entry=short_entry,
             short_exit=long_entry,
         )
+
+    def plot_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:
+        lookback = int(self.params["lookback"])
+        return {
+            "Prior high": data["high"].rolling(lookback).max().shift(1),
+            "Prior low": data["low"].rolling(lookback).min().shift(1),
+        }

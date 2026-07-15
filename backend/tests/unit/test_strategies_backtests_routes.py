@@ -8,7 +8,13 @@ from fastapi import FastAPI
 
 from quantlab.application.services.backtesting import DataNotAvailableError
 from quantlab.config import Settings
-from quantlab.domain.backtest import BacktestMetrics, BacktestResult, CostModel
+from quantlab.domain.backtest import (
+    BacktestChart,
+    BacktestMetrics,
+    BacktestResult,
+    ChartMarker,
+    CostModel,
+)
 from quantlab.domain.market import Symbol, Timeframe
 from quantlab.interfaces.api.app import create_app
 from quantlab.strategies.base import InvalidParameterError, ParamValue
@@ -26,6 +32,7 @@ class FakeBacktestService:
         start: datetime | None = None,
         end: datetime | None = None,
         costs: CostModel | None = None,
+        chart_bars: int | None = None,
     ) -> BacktestResult:
         if strategy_id == "nope":
             raise UnknownStrategyError("nope")
@@ -33,6 +40,17 @@ class FakeBacktestService:
             raise DataNotAvailableError("No local data for US30 H1")
         if params and "bad" in params:
             raise InvalidParameterError("Unknown parameters: ['bad']")
+        chart = None
+        if chart_bars:
+            chart = BacktestChart(
+                time=["2024-01-01 00:00:00+00:00"],
+                open=[1.0],
+                high=[1.1],
+                low=[0.9],
+                close=[1.05],
+                overlays={"EMA fast": [1.02]},
+                markers={"long_entry": [ChartMarker(time="2024-01-01 00:00:00+00:00", price=1.05)]},
+            )
         return BacktestResult(
             metrics=BacktestMetrics(sharpe=1.2, trades=42, total_return=0.3),
             equity=pd.Series(
@@ -41,6 +59,7 @@ class FakeBacktestService:
             ),
             fitness=0.55,
             params={"fast_period": 12},
+            chart=chart,
         )
 
 
@@ -82,6 +101,25 @@ async def test_run_backtest_returns_metrics_and_equity(settings: Settings) -> No
     assert body["metrics"]["trades"] == 42
     assert len(body["equity"]) == 3
     assert body["params"] == {"fast_period": 12}
+    # chart_bars defaults to 400, so the inspection chart is included
+    assert body["chart"]["overlays"] == {"EMA fast": [1.02]}
+    assert body["chart"]["markers"]["long_entry"][0]["price"] == 1.05
+
+
+async def test_run_backtest_can_skip_the_chart(settings: Settings) -> None:
+    app = create_app(settings)
+    async with build_client(app, RoutesStubContainer(settings)) as client:
+        response = await client.post(
+            "/api/v1/backtests",
+            json={
+                "strategy_id": "ema_cross",
+                "symbol": "EURUSD",
+                "timeframe": "H1",
+                "chart_bars": 0,
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["chart"] is None
 
 
 async def test_unknown_strategy_maps_to_404(settings: Settings) -> None:
