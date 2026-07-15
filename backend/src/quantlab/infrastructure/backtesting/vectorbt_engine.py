@@ -46,6 +46,7 @@ class VectorbtBacktestEngine(BacktestEngine):
         orders: OrderPlan,
         costs: CostModel,
         timeframe: Timeframe,
+        initial_cash: float | None = None,
     ) -> BacktestResult:
         slippage = pd.Series(costs.slippage_pct, index=data.index)
         if costs.use_spread and "spread" in data.columns:
@@ -63,7 +64,7 @@ class VectorbtBacktestEngine(BacktestEngine):
             sl_trail=orders.trailing,
             fees=costs.commission_pct,
             slippage=slippage,
-            init_cash=self._initial_cash,
+            init_cash=initial_cash if initial_cash is not None else self._initial_cash,
             # Default sizing (all available cash) is the only mode vectorbt
             # supports for signal-driven position reversals; granular position
             # sizing arrives with the risk-management phase.

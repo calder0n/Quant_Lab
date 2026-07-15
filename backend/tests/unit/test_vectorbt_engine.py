@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from quantlab.domain.backtest import CostModel, OrderPlan
 from quantlab.domain.market import Timeframe
@@ -147,6 +148,24 @@ def test_spread_mult_scales_the_spread_cost() -> None:
     normal = engine.run(data, signals, OrderPlan(), CostModel(spread_mult=1.0), Timeframe.H1)
     stressed = engine.run(data, signals, OrderPlan(), CostModel(spread_mult=5.0), Timeframe.H1)
     assert stressed.metrics.total_return < normal.metrics.total_return
+
+
+def test_initial_cash_scales_the_equity_curve() -> None:
+    data = trending_data()
+    signals = make_signals(data, entry_at=10, exit_at=190)
+    engine = VectorbtBacktestEngine()
+    default_run = engine.run(data, signals, OrderPlan(), CostModel(use_spread=False), Timeframe.H1)
+    funded = engine.run(
+        data,
+        signals,
+        OrderPlan(),
+        CostModel(use_spread=False),
+        Timeframe.H1,
+        initial_cash=100_000.0,
+    )
+    assert funded.equity.iloc[0] == pytest.approx(100_000.0)
+    # returns are capital-independent; only the absolute equity scales
+    assert funded.metrics.total_return == pytest.approx(default_run.metrics.total_return, rel=1e-6)
 
 
 def test_no_signals_produce_flat_metrics() -> None:

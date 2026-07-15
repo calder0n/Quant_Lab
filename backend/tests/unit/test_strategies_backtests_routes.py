@@ -33,6 +33,8 @@ class FakeBacktestService:
         end: datetime | None = None,
         costs: CostModel | None = None,
         chart_bars: int | None = None,
+        initial_cash: float | None = None,
+        months: int | None = None,
     ) -> BacktestResult:
         if strategy_id == "nope":
             raise UnknownStrategyError("nope")
@@ -40,6 +42,8 @@ class FakeBacktestService:
             raise DataNotAvailableError("No local data for US30 H1")
         if params and "bad" in params:
             raise InvalidParameterError("Unknown parameters: ['bad']")
+        self.last_initial_cash = initial_cash
+        self.last_months = months
         chart = None
         if chart_bars:
             chart = BacktestChart(
@@ -120,6 +124,25 @@ async def test_run_backtest_can_skip_the_chart(settings: Settings) -> None:
         )
     assert response.status_code == 200
     assert response.json()["chart"] is None
+
+
+async def test_initial_cash_and_months_reach_the_service(settings: Settings) -> None:
+    app = create_app(settings)
+    container = RoutesStubContainer(settings)
+    async with build_client(app, container) as client:
+        response = await client.post(
+            "/api/v1/backtests",
+            json={
+                "strategy_id": "ema_cross",
+                "symbol": "EURUSD",
+                "timeframe": "H1",
+                "initial_cash": 25_000,
+                "months": 6,
+            },
+        )
+    assert response.status_code == 200
+    assert container.backtest_service.last_initial_cash == 25_000
+    assert container.backtest_service.last_months == 6
 
 
 async def test_unknown_strategy_maps_to_404(settings: Settings) -> None:

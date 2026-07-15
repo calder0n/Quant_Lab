@@ -170,6 +170,8 @@ export default function BacktestPanel() {
   const [dataset, setDataset] = useState("");
   const [params, setParams] = useState<Record<string, ParamValue>>({});
   const [showParams, setShowParams] = useState(true);
+  const [initialCash, setInitialCash] = useState(10000);
+  const [months, setMonths] = useState("");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BacktestResponse | null>(null);
@@ -216,7 +218,15 @@ export default function BacktestPanel() {
       const response = await apiFetch("/backtests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ strategy_id: strategyId, symbol, timeframe, params, chart_bars: 400 }),
+        body: JSON.stringify({
+          strategy_id: strategyId,
+          symbol,
+          timeframe,
+          params,
+          chart_bars: 400,
+          initial_cash: initialCash > 0 ? initialCash : 10000,
+          months: months ? Number(months) : null,
+        }),
       });
       const body = await response.json();
       if (!response.ok) {
@@ -326,6 +336,36 @@ export default function BacktestPanel() {
               ))
             )}
           </select>
+          <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            Capital
+            <span className="flex items-center rounded-lg border border-slate-700 bg-slate-800 pl-2 text-sm text-slate-200">
+              <span className="text-slate-500">$</span>
+              <input
+                type="number"
+                min={1}
+                step={1000}
+                value={initialCash}
+                onChange={(e) => setInitialCash(Number(e.target.value))}
+                className="w-24 bg-transparent px-1 py-1.5 text-sm outline-none"
+              />
+            </span>
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            Period
+            <select
+              className={selectClass}
+              value={months}
+              onChange={(e) => setMonths(e.target.value)}
+            >
+              <option value="">All history</option>
+              <option value="1">Last 1 month</option>
+              <option value="3">Last 3 months</option>
+              <option value="6">Last 6 months</option>
+              <option value="12">Last 12 months</option>
+              <option value="24">Last 24 months</option>
+              <option value="36">Last 36 months</option>
+            </select>
+          </label>
           <button
             onClick={runBacktest}
             disabled={running || !strategyId || !dataset}
@@ -444,7 +484,23 @@ export default function BacktestPanel() {
             {/* Equity + drawdown */}
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-2">
-                <p className="px-2 pt-1 text-xs text-slate-500">Equity curve</p>
+                <p className="px-2 pt-1 text-xs text-slate-500">
+                  Equity curve
+                  {result.equity.length > 0 && (
+                    <span className="ml-1 tabular-nums">
+                      · ${Math.round(result.equity[0].value).toLocaleString()} →{" "}
+                      <span
+                        className={
+                          result.equity[result.equity.length - 1].value >= result.equity[0].value
+                            ? "text-emerald-400"
+                            : "text-rose-400"
+                        }
+                      >
+                        ${Math.round(result.equity[result.equity.length - 1].value).toLocaleString()}
+                      </span>
+                    </span>
+                  )}
+                </p>
                 <PlotlyChart
                   data={[
                     {

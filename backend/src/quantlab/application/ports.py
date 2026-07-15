@@ -264,7 +264,9 @@ class BacktestEngine(ABC):
         orders: OrderPlan,
         costs: CostModel,
         timeframe: Timeframe,
-    ) -> BacktestResult: ...
+        initial_cash: float | None = None,
+    ) -> BacktestResult:
+        """Run the simulation; ``initial_cash=None`` uses the engine's default."""
 
 
 class DatasetRepository(ABC):

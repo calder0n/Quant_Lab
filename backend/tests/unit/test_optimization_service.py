@@ -112,6 +112,7 @@ class ScoreByFastPeriod(BacktestEngine):
         orders: OrderPlan,
         costs: CostModel,
         timeframe: Timeframe,
+        initial_cash: float | None = None,
     ) -> BacktestResult:
         return BacktestResult(
             metrics=BacktestMetrics(sharpe=1.0, trades=100, profit_factor=1.5),

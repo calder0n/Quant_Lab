@@ -70,6 +70,7 @@ class DeterministicEngine(BacktestEngine):
         orders: OrderPlan,
         costs: CostModel,
         timeframe: Timeframe,
+        initial_cash: float | None = None,
     ) -> BacktestResult:
         self.calls.append(costs)
         # Costs degrade the outcome so stress scenarios rank below baseline.

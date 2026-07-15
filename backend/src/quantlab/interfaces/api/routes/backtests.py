@@ -28,6 +28,8 @@ class BacktestRequest(BaseModel):
     slippage_pct: float = Field(0.0, ge=0.0, le=0.01)
     use_spread: bool = True
     chart_bars: int = Field(400, ge=0, le=3000)
+    initial_cash: float = Field(10_000.0, gt=0, le=1_000_000_000)
+    months: int | None = Field(None, ge=1, le=360)
 
 
 class EquityPoint(BaseModel):
@@ -114,6 +116,8 @@ def run_backtest(
                 use_spread=request.use_spread,
             ),
             chart_bars=request.chart_bars,
+            initial_cash=request.initial_cash,
+            months=request.months,
         )
     except UnknownStrategyError as exc:
         raise HTTPException(

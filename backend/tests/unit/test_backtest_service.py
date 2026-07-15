@@ -26,11 +26,22 @@ class FakeEngine(BacktestEngine):
         orders: OrderPlan,
         costs: CostModel,
         timeframe: Timeframe,
+        initial_cash: float | None = None,
     ) -> BacktestResult:
-        self.calls.append({"bars": len(data), "costs": costs, "timeframe": timeframe})
+        self.calls.append(
+            {
+                "bars": len(data),
+                "costs": costs,
+                "timeframe": timeframe,
+                "initial_cash": initial_cash,
+                "first_time": data.index[0],
+                "last_time": data.index[-1],
+            }
+        )
+        start_cash = initial_cash if initial_cash is not None else 10_000.0
         return BacktestResult(
             metrics=BacktestMetrics(sharpe=1.5, profit_factor=1.8, trades=50),
-            equity=pd.Series([10_000.0, 11_000.0], index=data.index[:2]),
+            equity=pd.Series([start_cash, start_cash * 1.1], index=data.index[:2]),
         )
 
 
@@ -72,6 +83,37 @@ def test_chart_window_caps_at_available_bars(service: tuple[BacktestService, Fak
     assert result.chart is not None
     assert len(result.chart.time) == 300
     assert result.chart.overlays == {}  # rsi is an oscillator: markers only
+
+
+def test_initial_cash_is_forwarded_to_the_engine(
+    service: tuple[BacktestService, FakeEngine],
+) -> None:
+    backtest_service, engine = service
+    result = backtest_service.run("ema_cross", Symbol.EURUSD, Timeframe.H1, initial_cash=50_000.0)
+    assert engine.calls[0]["initial_cash"] == 50_000.0
+    assert result.equity.iloc[0] == 50_000.0  # equity starts at the chosen capital
+
+
+def test_months_window_slices_recent_data(tmp_path: Path) -> None:
+    from tests.factories import utc
+
+    store = ParquetCandleStore(tmp_path / "candles")
+    # ~5 months of H1 bars ending 2024-06-01
+    store.append(Symbol.EURUSD, Timeframe.H1, make_market_data(3600, start=utc(2024, 1, 1)))
+    engine = FakeEngine()
+    svc = BacktestService(store, StrategyRegistry().discover(), engine)
+
+    svc.run("ema_cross", Symbol.EURUSD, Timeframe.H1)  # full range
+    svc.run("ema_cross", Symbol.EURUSD, Timeframe.H1, months=1)  # last month only
+
+    full_bars = engine.calls[0]["bars"]
+    windowed_bars = engine.calls[1]["bars"]
+    assert isinstance(windowed_bars, int) and isinstance(full_bars, int)
+    assert windowed_bars < full_bars
+    # the window starts one month before the last stored bar
+    coverage_end = engine.calls[0]["last_time"]
+    window_start = engine.calls[1]["first_time"]
+    assert window_start >= coverage_end - pd.DateOffset(months=1)
 
 
 def test_run_passes_custom_costs(service: tuple[BacktestService, FakeEngine]) -> None:

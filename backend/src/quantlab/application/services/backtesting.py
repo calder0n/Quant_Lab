@@ -75,11 +75,17 @@ class BacktestService:
         end: datetime | None = None,
         costs: CostModel | None = None,
         chart_bars: int | None = None,
+        initial_cash: float | None = None,
+        months: int | None = None,
     ) -> BacktestResult:
-        if self._store.coverage(symbol, timeframe) is None:
+        coverage = self._store.coverage(symbol, timeframe)
+        if coverage is None:
             raise DataNotAvailableError(
                 f"No local data for {symbol} {timeframe}; run a dataset sync first."
             )
+        # A months window is measured back from the most recent stored bar.
+        if months is not None and start is None:
+            start = (pd.Timestamp(coverage.end) - pd.DateOffset(months=months)).to_pydatetime()
         data = self._store.load(symbol, timeframe, start=start, end=end)
         if len(data) < MIN_BARS:
             raise DataNotAvailableError(
@@ -88,7 +94,9 @@ class BacktestService:
         strategy = self._registry.create(strategy_id, params)
         signals = strategy.generate_signals(data)
         orders = strategy.generate_orders(data, signals)
-        result = self._engine.run(data, signals, orders, costs or CostModel(), timeframe)
+        result = self._engine.run(
+            data, signals, orders, costs or CostModel(), timeframe, initial_cash=initial_cash
+        )
         result.fitness = strategy.fitness(result.metrics)
         result.params = dict(strategy.params)
         if chart_bars:
