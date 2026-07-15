@@ -75,6 +75,7 @@ class DataIngestionService:
     ) -> Dataset:
         """Bring one series up to date. Never raises: failures land in the catalog."""
         end_at = end if end is not None else datetime.now(UTC)
+        logger.info("Sync started: %s %s", symbol, timeframe)
         dataset = await self._transition(symbol, timeframe, DatasetStatus.SYNCING)
         try:
             new_candles = await self._download_missing(symbol, timeframe, end_at)
@@ -99,6 +100,13 @@ class DataIngestionService:
             dataset.start_at = coverage.start
             dataset.end_at = coverage.end
         dataset = await self._save(dataset)
+        logger.info(
+            "Sync completed: %s %s (+%s candles, %s total)",
+            symbol,
+            timeframe,
+            new_candles,
+            dataset.candle_count,
+        )
         await self._event_bus.publish(
             DatasetSyncCompleted(
                 symbol=symbol,

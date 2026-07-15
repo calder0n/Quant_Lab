@@ -42,6 +42,7 @@ class BacktestResponse(BaseModel):
     fitness: float
     metrics: BacktestMetrics
     equity: list[EquityPoint]
+    trade_returns: list[float]
 
     @classmethod
     def from_result(cls, request: BacktestRequest, result: BacktestResult) -> "BacktestResponse":
@@ -58,6 +59,7 @@ class BacktestResponse(BaseModel):
             fitness=result.fitness,
             metrics=result.metrics,
             equity=equity,
+            trade_returns=result.trade_returns,
         )
 
 

@@ -31,10 +31,17 @@ def redis_settings(settings: Settings | None = None) -> RedisSettings:
 
 
 async def startup(ctx: dict[str, Any]) -> None:
-    ctx["container"] = Container(Settings())
+    from quantlab.infrastructure.logging.redis_handler import setup_dashboard_logging
+
+    settings = Settings()
+    ctx["container"] = Container(settings)
+    ctx["log_handler"] = setup_dashboard_logging(settings.redis_url, source="worker")
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
+    from quantlab.infrastructure.logging.redis_handler import teardown_dashboard_logging
+
+    teardown_dashboard_logging(ctx.get("log_handler"))
     container: Container = ctx["container"]
     await container.aclose()
 

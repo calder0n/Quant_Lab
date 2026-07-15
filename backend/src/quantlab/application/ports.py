@@ -134,6 +134,16 @@ class OptimizationRepository(ABC):
     async def top_trials(self, study_id: uuid.UUID, limit: int = 10) -> list[OptimizationTrial]:
         """Best trials of a study, ranked by score descending."""
 
+    @abstractmethod
+    async def global_ranking(
+        self, limit: int = 20
+    ) -> list[tuple[OptimizationTrial, OptimizationStudy]]:
+        """Best trials across every completed study, with their study context."""
+
+    @abstractmethod
+    async def heatmap(self) -> list[tuple[str, str, float, int]]:
+        """Per (symbol, timeframe): best study score and study count."""
+
 
 class ValidationRepository(ABC):
     """Persistence port for validation runs (walk-forward, Monte Carlo, stress)."""

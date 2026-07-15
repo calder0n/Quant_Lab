@@ -3,7 +3,7 @@
 Laboratorio de investigación cuantitativa: descubrimiento masivo de estrategias mediante
 backtesting, optimización y validación robusta. Ejecución 100% local sobre Docker.
 
-> **Estado:** Fase 6 — Machine Learning (XGBoost/LightGBM/CatBoost/PyTorch) + RL (Gymnasium + SB3).
+> **Estado:** Fase 7 — Dashboard completo (Plotly: equity, drawdown, distribución, heatmap, ranking, logs).
 
 ## Stack
 
@@ -131,5 +131,5 @@ los módulos se comunican por eventos de dominio a través del `EventBus`.
 | 4 ✅ | Optimización masiva (Optuna/GA/Nevergrad/Bayesian) con función objetivo configurable |
 | 5 ✅ | Validación: Walk-Forward, Monte Carlo, stress testing, costes realistas |
 | 6 ✅ | ML (clasificadores/regresores) y RL (Gymnasium + SB3) |
-| 7 | Dashboard completo: heatmaps, equity, drawdown, ranking, logs |
+| 7 ✅ | Dashboard completo: heatmaps, equity, drawdown, ranking, logs |
 | 8 | Administración (auth, roles, API keys) y ejecución paper/live vía OANDA |

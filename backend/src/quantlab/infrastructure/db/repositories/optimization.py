@@ -4,7 +4,7 @@ import uuid
 from dataclasses import asdict
 from typing import cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from quantlab.application.ports import OptimizationRepository
@@ -124,3 +124,37 @@ class SqlAlchemyOptimizationRepository(OptimizationRepository):
             .limit(limit)
         )
         return [_trial_to_entity(record) for record in result.scalars()]
+
+    async def global_ranking(
+        self, limit: int = 20
+    ) -> list[tuple[OptimizationTrial, OptimizationStudy]]:
+        result = await self._session.execute(
+            select(OptimizationTrialRecord, OptimizationStudyRecord)
+            .join(
+                OptimizationStudyRecord,
+                OptimizationTrialRecord.study_id == OptimizationStudyRecord.id,
+            )
+            .where(OptimizationStudyRecord.status == "completed")
+            .order_by(OptimizationTrialRecord.score.desc())
+            .limit(limit)
+        )
+        return [(_trial_to_entity(trial), _study_to_entity(study)) for trial, study in result.all()]
+
+    async def heatmap(self) -> list[tuple[str, str, float, int]]:
+        result = await self._session.execute(
+            select(
+                OptimizationStudyRecord.symbol,
+                OptimizationStudyRecord.timeframe,
+                func.max(OptimizationStudyRecord.best_score),
+                func.count(OptimizationStudyRecord.id),
+            )
+            .where(
+                OptimizationStudyRecord.status == "completed",
+                OptimizationStudyRecord.best_score.is_not(None),
+            )
+            .group_by(OptimizationStudyRecord.symbol, OptimizationStudyRecord.timeframe)
+        )
+        return [
+            (symbol, timeframe, float(best), int(count))
+            for symbol, timeframe, best, count in result.all()
+        ]

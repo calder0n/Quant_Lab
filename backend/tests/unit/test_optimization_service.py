@@ -60,6 +60,22 @@ class InMemoryOptimizationRepo(OptimizationRepository):
         matching = [t for t in self.trials if t.study_id == study_id]
         return sorted(matching, key=lambda t: t.score, reverse=True)[:limit]
 
+    async def global_ranking(
+        self, limit: int = 20
+    ) -> list[tuple[OptimizationTrial, OptimizationStudy]]:
+        ranked = sorted(self.trials, key=lambda t: t.score, reverse=True)[:limit]
+        return [(t, self._studies[t.study_id]) for t in ranked if t.study_id in self._studies]
+
+    async def heatmap(self) -> list[tuple[str, str, float, int]]:
+        cells: dict[tuple[str, str], tuple[float, int]] = {}
+        for study in self._studies.values():
+            if study.best_score is None:
+                continue
+            key = (study.symbol.value, study.timeframe.value)
+            best, count = cells.get(key, (float("-inf"), 0))
+            cells[key] = (max(best, study.best_score), count + 1)
+        return [(s, tf, best, count) for (s, tf), (best, count) in cells.items()]
+
 
 class FakeOptimizer(Optimizer):
     """Proposes ema_cross params with increasing fast periods."""

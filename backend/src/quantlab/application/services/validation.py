@@ -100,6 +100,9 @@ class ValidationService:
             raise ValidationError(f"Validation {run_id} not found")
         run.status = StudyStatus.RUNNING
         run = await self._save(run)
+        logger.info(
+            "Validation started: %s %s %s %s", run.kind, run.strategy_id, run.symbol, run.timeframe
+        )
         try:
             data = await asyncio.to_thread(self._store.load, run.symbol, run.timeframe)
             if len(data) < MIN_BARS:
@@ -110,6 +113,7 @@ class ValidationService:
             run.status = StudyStatus.COMPLETED
             run.message = None
             run = await self._save(run)
+            logger.info("Validation completed: %s %s", run.kind, run.strategy_id)
             await self._event_bus.publish(
                 ValidationCompleted(
                     validation_id=run.id, kind=run.kind, strategy_id=run.strategy_id

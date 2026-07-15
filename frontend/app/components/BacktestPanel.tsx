@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import PlotlyChart from "./PlotlyChart";
+
 type DatasetOption = { symbol: string; timeframe: string; status: string };
 type StrategyOption = { strategy_id: string; name: string };
 
@@ -20,7 +22,21 @@ type Metrics = {
   trades: number;
 };
 
-type BacktestResponse = { fitness: number; metrics: Metrics };
+type EquityPoint = { time: string; value: number };
+type BacktestResponse = {
+  fitness: number;
+  metrics: Metrics;
+  equity: EquityPoint[];
+  trade_returns: number[];
+};
+
+function drawdownSeries(equity: EquityPoint[]): number[] {
+  let peak = -Infinity;
+  return equity.map((point) => {
+    peak = Math.max(peak, point.value);
+    return peak > 0 ? (point.value / peak - 1) * 100 : 0;
+  });
+}
 
 const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
 const num = (value: number) => value.toFixed(2);
@@ -153,16 +169,75 @@ export default function BacktestPanel() {
         )}
 
         {result && (
-          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-            {METRIC_VIEW.map(({ key, label, fmt }) => (
-              <div key={key} className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                <p className="text-xs text-slate-500">{label}</p>
-                <p className="mt-1 text-sm font-semibold tabular-nums">
-                  {fmt(result.metrics[key])}
-                </p>
+          <>
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+              {METRIC_VIEW.map(({ key, label, fmt }) => (
+                <div key={key} className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+                  <p className="text-xs text-slate-500">{label}</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">
+                    {fmt(result.metrics[key])}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-2">
+                <p className="px-2 pt-1 text-xs text-slate-500">Equity curve</p>
+                <PlotlyChart
+                  data={[
+                    {
+                      x: result.equity.map((p) => p.time),
+                      y: result.equity.map((p) => p.value),
+                      type: "scatter",
+                      mode: "lines",
+                      line: { color: "#34d399", width: 1.5 },
+                      hovertemplate: "%{x}<br>%{y:,.0f}<extra></extra>",
+                    },
+                  ]}
+                  height={240}
+                />
               </div>
-            ))}
-          </div>
+              <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-2">
+                <p className="px-2 pt-1 text-xs text-slate-500">Drawdown</p>
+                <PlotlyChart
+                  data={[
+                    {
+                      x: result.equity.map((p) => p.time),
+                      y: drawdownSeries(result.equity),
+                      type: "scatter",
+                      mode: "lines",
+                      fill: "tozeroy",
+                      line: { color: "#fb7185", width: 1 },
+                      fillcolor: "rgba(251,113,133,0.15)",
+                      hovertemplate: "%{x}<br>%{y:.2f}%<extra></extra>",
+                    },
+                  ]}
+                  layout={{ yaxis: { ticksuffix: "%" } }}
+                  height={240}
+                />
+              </div>
+            </div>
+            {result.trade_returns.length > 0 && (
+              <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-2">
+                <p className="px-2 pt-1 text-xs text-slate-500">
+                  Trade return distribution ({result.trade_returns.length} trades)
+                </p>
+                <PlotlyChart
+                  data={[
+                    {
+                      x: result.trade_returns.map((r) => r * 100),
+                      type: "histogram",
+                      nbinsx: 60,
+                      marker: { color: "#38bdf8", opacity: 0.85 },
+                      hovertemplate: "%{x:.2f}%: %{y} trades<extra></extra>",
+                    },
+                  ]}
+                  layout={{ xaxis: { ticksuffix: "%" }, bargap: 0.05 }}
+                  height={220}
+                />
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>

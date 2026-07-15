@@ -83,6 +83,14 @@ class OptimizationService:
             raise StudyNotFoundError(str(study_id))
         study.status = StudyStatus.RUNNING
         study = await self._save(study)
+        logger.info(
+            "Study started: %s %s %s (%s trials, %s)",
+            study.strategy_id,
+            study.symbol,
+            study.timeframe,
+            study.n_trials,
+            study.optimizer,
+        )
         try:
             return await self._execute(study)
         except Exception as exc:
@@ -121,6 +129,13 @@ class OptimizationService:
         study.trials_completed = outcome.trials_completed
         study.message = None
         study = await self._save(study)
+        logger.info(
+            "Study completed: %s %s %s best_score=%.4f",
+            study.strategy_id,
+            study.symbol,
+            study.timeframe,
+            outcome.best_score,
+        )
         await self._event_bus.publish(
             StudyCompleted(
                 study_id=study.id,

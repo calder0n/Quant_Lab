@@ -13,12 +13,17 @@ from fastapi import FastAPI
 from quantlab import __version__
 from quantlab.config import Settings
 from quantlab.container import Container
+from quantlab.infrastructure.logging.redis_handler import (
+    setup_dashboard_logging,
+    teardown_dashboard_logging,
+)
 from quantlab.interfaces.api.routes import (
     backtests,
     datasets,
     health,
     ml,
     optimizations,
+    results,
     strategies,
     validations,
     workers,
@@ -34,9 +39,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         container = Container(app_settings)
         app.state.container = container
+        log_handler = setup_dashboard_logging(app_settings.redis_url, source="api")
         try:
             yield
         finally:
+            teardown_dashboard_logging(log_handler)
             await container.aclose()
 
     app = FastAPI(
@@ -53,5 +60,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(optimizations.router, prefix=app_settings.api_v1_prefix)
     app.include_router(validations.router, prefix=app_settings.api_v1_prefix)
     app.include_router(ml.router, prefix=app_settings.api_v1_prefix)
+    app.include_router(results.router, prefix=app_settings.api_v1_prefix)
     app.include_router(workers.router, prefix=app_settings.api_v1_prefix)
     return app

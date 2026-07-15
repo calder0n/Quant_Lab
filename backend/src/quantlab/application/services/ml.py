@@ -63,6 +63,14 @@ class MlService:
             raise MlTrainingError(f"Model {model_id} not found")
         model.status = StudyStatus.RUNNING
         model = await self._save(model)
+        logger.info(
+            "Training started: %s %s %s on %s %s",
+            model.kind,
+            model.algorithm,
+            model.target,
+            model.symbol,
+            model.timeframe,
+        )
         try:
             if model.kind == ModelKind.ML:
                 metrics, artifact = await asyncio.to_thread(self._train_supervised, model)
@@ -73,6 +81,7 @@ class MlService:
             model.status = StudyStatus.COMPLETED
             model.message = None
             model = await self._save(model)
+            logger.info("Training completed: %s %s %s", model.kind, model.algorithm, model.target)
             await self._event_bus.publish(
                 ModelTrained(model_id=model.id, kind=model.kind, algorithm=model.algorithm)
             )
