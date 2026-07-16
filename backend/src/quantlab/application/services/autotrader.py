@@ -27,6 +27,9 @@ from quantlab.strategies.base import ParamValue
 from quantlab.strategies.registry import StrategyRegistry, UnknownStrategyError
 
 logger = logging.getLogger(__name__)
+# Heartbeat lives outside the ``quantlab`` logger tree so it prints to the
+# worker's stdout every tick without flooding the capped dashboard log buffer.
+heartbeat = logging.getLogger("autotrader.heartbeat")
 
 AutoTraderRepositoryFactory = Callable[[], AbstractAsyncContextManager[AutoTraderRepository]]
 TradingStateRepositoryFactory = Callable[[], AbstractAsyncContextManager[TradingStateRepository]]
@@ -117,6 +120,14 @@ class AutoTraderService:
                 continue
             if await self._run_one(auto_trader, now):
                 processed.append(auto_trader)
+
+        heartbeat.info(
+            "%s | kill-switch %s | %d enabled, %d acted this tick",
+            now.isoformat(timespec="seconds"),
+            "ON" if globally_enabled else "OFF",
+            len(due),
+            len(processed),
+        )
         return processed
 
     async def _run_one(self, auto_trader: AutoTrader, now: datetime) -> bool:

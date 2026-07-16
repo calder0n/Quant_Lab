@@ -219,6 +219,16 @@ async def test_run_tick_ignores_disabled_assignments() -> None:
     assert trading.calls == []
 
 
+async def test_run_tick_emits_a_heartbeat(caplog: pytest.LogCaptureFixture) -> None:
+    service, store, _, _, _ = build()
+    at = await service.create("ema_cross", Symbol.EURUSD, Timeframe.H1, 1000.0)
+    at.enabled = True
+    store[at.id] = at
+    with caplog.at_level("INFO", logger="autotrader.heartbeat"):
+        await service.run_tick(NOW)
+    assert any("kill-switch ON | 1 enabled, 1 acted" in m for m in caplog.messages)
+
+
 async def test_failed_execution_is_recorded_and_retries_next_tick() -> None:
     trading = FakeTradingService(raises=RuntimeError("broker down"))
     service, store, _, _, _ = build(trading=trading)
