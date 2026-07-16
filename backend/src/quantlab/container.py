@@ -333,6 +333,7 @@ class Container:
                 states=self.trading_state_repository,
                 trading_service=self.trading_service,
                 registry=self.strategy_registry,
+                market_data=self.market_data_provider,
             )
         return self._auto_trader_service
 

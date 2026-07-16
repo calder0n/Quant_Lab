@@ -11,6 +11,8 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+import pandas as pd
+
 from quantlab.application.event_bus import EventBus
 from quantlab.application.ports import (
     ExecutionBroker,
@@ -125,17 +127,24 @@ class TradingService:
         timeframe: Timeframe,
         units: float,
         params: dict[str, ParamValue] | None = None,
+        data: pd.DataFrame | None = None,
     ) -> ExecutionReport:
-        """Evaluate the strategy on fresh broker candles and act on the last bar."""
+        """Evaluate the strategy on broker candles and act on the last closed bar.
+
+        ``data`` may be pre-fetched by the caller (the auto-trader fetches once
+        to gate on the candle-close time and reuses it here); otherwise fresh
+        candles are pulled from the broker.
+        """
         async with self._states() as repo:
             state = await repo.get()
         if not state.enabled:
             raise TradingDisabledError("Trading is disabled (kill switch off).")
 
-        provider = await self._market_data()
-        end = datetime.now(UTC)
-        start = end - SIGNAL_LOOKBACK_BARS * timeframe.delta
-        data = await provider.fetch_candles(symbol, timeframe, start, end)
+        if data is None:
+            provider = await self._market_data()
+            end = datetime.now(UTC)
+            start = end - SIGNAL_LOOKBACK_BARS * timeframe.delta
+            data = await provider.fetch_candles(symbol, timeframe, start, end)
         if len(data) < 50:
             raise ValueError(f"Only {len(data)} fresh bars available for {symbol} {timeframe}.")
 

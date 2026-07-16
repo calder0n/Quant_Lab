@@ -65,7 +65,8 @@
       "Bash(git commit -m 'Toggleable entry filters per strategy *)",
       "Bash(git commit -m 'Quick backtest: configurable initial capital and months window *)",
       "Bash(git commit -m 'Add auto-trader: dedicated Docker worker that runs strategies live on OANDA *)",
-      "Bash(git commit -m 'Add '\\\\''Send to auto-trader'\\\\'' button across backtest, results and optimization *)"
+      "Bash(git commit -m 'Add '\\\\''Send to auto-trader'\\\\'' button across backtest, results and optimization *)",
+      "Bash(git commit -m 'Auto-trader: act on real candle-close, not a UTC clock bucket *)"
     ]
   }
 }

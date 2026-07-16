@@ -1,22 +1,26 @@
 """Automated-trading orchestration.
 
-Owns the CRUD of auto-trading assignments and the per-tick scheduler used by
-the dedicated worker. Scheduling is deduplicated by *timeframe bucket*: at time
-``t`` the bucket is ``floor(t / timeframe_seconds)``, so each assignment acts at
-most once per bar. The actual reading of fresh OANDA candles, signal evaluation
-and order placement is delegated to :class:`TradingService`, so the auto-trader
-reuses the exact same execution path (kill switch, SL/TP, reversals) as a manual
-run — it only adds scheduling and persistence.
+Owns the CRUD of auto-trading assignments and the per-tick scheduler used by the
+dedicated worker. The worker polls at a fine cadence (seconds); each poll fetches
+the latest OANDA candles once and acts **only when a new bar has closed** — i.e.
+the moment the strategy's timeframe bar completes on the broker's own grid — so
+entries fire within one poll of the real candle close, never mid-bar and never on
+a sliding window. Execution itself (kill switch, SL/TP, reversals) is delegated
+to :class:`TradingService`, reusing the exact path of a manual run.
 """
 
 import logging
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 
-from quantlab.application.ports import AutoTraderRepository, TradingStateRepository
-from quantlab.application.services.trading import TradingService
+from quantlab.application.ports import (
+    AutoTraderRepository,
+    MarketDataProvider,
+    TradingStateRepository,
+)
+from quantlab.application.services.trading import SIGNAL_LOOKBACK_BARS, TradingService
 from quantlab.domain.autotrader import AutoTrader
 from quantlab.domain.market import Symbol, Timeframe
 from quantlab.strategies.base import ParamValue
@@ -39,11 +43,13 @@ class AutoTraderService:
         states: TradingStateRepositoryFactory,
         trading_service: TradingService,
         registry: StrategyRegistry,
+        market_data: Callable[[], Awaitable[MarketDataProvider]],
     ) -> None:
         self._repositories = repositories
         self._states = states
         self._trading = trading_service
         self._registry = registry
+        self._market_data = market_data
 
     # -- CRUD ------------------------------------------------------------------
 
@@ -79,7 +85,7 @@ class AutoTraderService:
             auto_trader.enabled = enabled
             if enabled:
                 auto_trader.message = None
-                auto_trader.last_bucket = None  # act on the current bar right away
+                auto_trader.last_signal_time = None  # act on the current bar right away
             return await repo.update(auto_trader)
 
     async def delete(self, auto_trader_id: uuid.UUID) -> bool:
@@ -92,7 +98,7 @@ class AutoTraderService:
     # -- scheduler -------------------------------------------------------------
 
     async def run_tick(self, now: datetime) -> list[AutoTrader]:
-        """Process every enabled assignment whose timeframe bar has advanced.
+        """Process every enabled assignment whose latest bar has just closed.
 
         Never raises: per-assignment failures are recorded on the row so the
         dashboard can surface them while the loop keeps running.
@@ -104,48 +110,61 @@ class AutoTraderService:
 
         processed: list[AutoTrader] = []
         for auto_trader in due:
-            bucket = int(now.timestamp() // auto_trader.timeframe.seconds)
-            if auto_trader.last_bucket == bucket:
-                continue  # already acted on this bar
             if not globally_enabled:
                 if auto_trader.message != GLOBAL_OFF_MESSAGE:
                     auto_trader.message = GLOBAL_OFF_MESSAGE
                     await self._save(auto_trader)
                 continue
-            await self._run_one(auto_trader, bucket, now)
-            processed.append(auto_trader)
+            if await self._run_one(auto_trader, now):
+                processed.append(auto_trader)
         return processed
 
-    async def _run_one(self, auto_trader: AutoTrader, bucket: int, now: datetime) -> None:
+    async def _run_one(self, auto_trader: AutoTrader, now: datetime) -> bool:
+        """Act only if the broker's latest *closed* bar is newer than the last one
+        we already processed for this assignment. Returns whether an order pass ran.
+        """
         try:
+            provider = await self._market_data()
+            start = now - SIGNAL_LOOKBACK_BARS * auto_trader.timeframe.delta
+            data = await provider.fetch_candles(
+                auto_trader.symbol, auto_trader.timeframe, start, now
+            )
+            if len(data) == 0:
+                return False
+            last_bar = str(data.index[-1])
+            if last_bar == auto_trader.last_signal_time:
+                return False  # no new closed bar since we last acted
+
             report = await self._trading.execute(
                 strategy_id=auto_trader.strategy_id,
                 symbol=auto_trader.symbol,
                 timeframe=auto_trader.timeframe,
                 units=auto_trader.units,
                 params=auto_trader.params,
+                data=data,
             )
-            auto_trader.last_bucket = bucket
             auto_trader.last_run = now
             auto_trader.last_signal_time = report.signal_time
             auto_trader.last_action = report.action
             auto_trader.message = None
             logger.info(
-                "AutoTrader %s %s %s -> %s",
+                "AutoTrader %s %s %s bar %s -> %s",
                 auto_trader.strategy_id,
                 auto_trader.symbol,
                 auto_trader.timeframe,
+                report.signal_time,
                 report.action,
             )
         except UnknownStrategyError as exc:
             auto_trader.message = f"Unknown strategy: {exc.args[0]}"
             logger.exception("AutoTrader %s misconfigured", auto_trader.id)
         except Exception as exc:
-            # Transient (e.g. broker unreachable): keep last_bucket so it retries
-            # on the next tick rather than waiting a whole bar.
+            # Transient (e.g. broker unreachable): last_signal_time is untouched,
+            # so the same bar is retried on the next tick.
             auto_trader.message = f"{type(exc).__name__}: {exc}"
             logger.exception("AutoTrader %s failed", auto_trader.id)
         await self._save(auto_trader)
+        return True
 
     async def _save(self, auto_trader: AutoTrader) -> None:
         async with self._repositories() as repo:
