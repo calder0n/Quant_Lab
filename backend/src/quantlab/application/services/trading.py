@@ -167,6 +167,11 @@ class TradingService:
 
         sl_pct = float(plan.sl_pct.iloc[-1]) if plan.sl_pct is not None else None
         tp_pct = float(plan.tp_pct.iloc[-1]) if plan.tp_pct is not None else None
+        # A trailing plan turns the SL distance into a trailing stop (matching the
+        # backtest's ``sl_trail``); the fixed stop level is then left unset so OANDA
+        # doesn't reject a fixed + trailing stop on the same order.
+        trailing = plan.trailing
+        trailing_distance = close * sl_pct if (trailing and sl_pct) else None
         orders: list[OrderResult] = []
         action = "none"
 
@@ -177,8 +182,9 @@ class TradingService:
                 await broker.place_market_order(
                     symbol,
                     abs(units),
-                    stop_loss=close * (1 - sl_pct) if sl_pct else None,
+                    stop_loss=None if trailing else (close * (1 - sl_pct) if sl_pct else None),
                     take_profit=close * (1 + tp_pct) if tp_pct else None,
+                    trailing_distance=trailing_distance,
                 )
             )
             action = "opened_long"
@@ -189,8 +195,9 @@ class TradingService:
                 await broker.place_market_order(
                     symbol,
                     -abs(units),
-                    stop_loss=close * (1 + sl_pct) if sl_pct else None,
+                    stop_loss=None if trailing else (close * (1 + sl_pct) if sl_pct else None),
                     take_profit=close * (1 - tp_pct) if tp_pct else None,
+                    trailing_distance=trailing_distance,
                 )
             )
             action = "opened_short"

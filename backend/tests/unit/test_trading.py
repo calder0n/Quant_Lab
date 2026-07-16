@@ -56,7 +56,9 @@ class InMemoryTradingState(TradingStateRepository):
 class FakeBroker(ExecutionBroker):
     def __init__(self, positions: list[Position] | None = None) -> None:
         self.positions = positions or []
-        self.market_orders: list[tuple[Symbol, float, float | None, float | None]] = []
+        self.market_orders: list[
+            tuple[Symbol, float, float | None, float | None, float | None]
+        ] = []
         self.closed: list[Symbol] = []
 
     async def account_summary(self) -> AccountSummary:
@@ -73,8 +75,9 @@ class FakeBroker(ExecutionBroker):
         units: float,
         stop_loss: float | None = None,
         take_profit: float | None = None,
+        trailing_distance: float | None = None,
     ) -> OrderResult:
-        self.market_orders.append((symbol, units, stop_loss, take_profit))
+        self.market_orders.append((symbol, units, stop_loss, take_profit, trailing_distance))
         return OrderResult(instrument=EUR_USD, units=units, filled=True, order_id="42")
 
     async def close_position(self, symbol: Symbol) -> OrderResult:
@@ -208,11 +211,27 @@ async def test_execute_opens_long_with_sl_tp_on_entry_signal() -> None:
     report = await service.execute("ema_cross", Symbol.EURUSD, Timeframe.H1, units=1000)
     assert report.action == "opened_long"
     assert len(broker.market_orders) == 1
-    symbol, units, stop_loss, take_profit = broker.market_orders[0]
+    symbol, units, stop_loss, take_profit, trailing_distance = broker.market_orders[0]
     assert (symbol, units) == (Symbol.EURUSD, 1000)
     assert stop_loss is not None and take_profit is not None
     assert stop_loss < take_profit  # long: SL below entry, TP above
+    assert trailing_distance is None  # ema_cross default plan is a fixed stop
     assert any(isinstance(e, OrderExecuted) for e in events)
+
+
+async def test_execute_uses_trailing_stop_when_plan_is_trailing() -> None:
+    """A trailing plan attaches a trailing-stop distance and no fixed stop level."""
+    broker = FakeBroker()
+    service, _, _ = build_service(broker, SignalProvider(rising_then_data()))
+    await service.set_enabled(True)
+    # use_trailing turns ema_cross's ATR stop into a trailing stop.
+    await service.execute(
+        "ema_cross", Symbol.EURUSD, Timeframe.H1, units=1000, params={"use_trailing": True}
+    )
+    _, _, stop_loss, take_profit, trailing_distance = broker.market_orders[0]
+    assert stop_loss is None  # no fixed stop alongside a trailing one
+    assert trailing_distance is not None and trailing_distance > 0
+    assert take_profit is not None  # TP stays fixed
 
 
 async def test_execute_reverses_an_open_short_first() -> None:
@@ -319,7 +338,27 @@ async def test_oanda_execution_market_order_payload() -> None:
     assert order["units"] == "1000"  # type: ignore[index]
     assert order["stopLossOnFill"] == {"price": "1.09123"}  # type: ignore[index]
     assert order["takeProfitOnFill"] == {"price": "1.12988"}  # type: ignore[index]
+    assert "trailingStopLossOnFill" not in order  # type: ignore[operator]
     assert result.filled and result.order_id == "77"
+
+
+async def test_oanda_execution_trailing_stop_payload() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            201, json={"orderFillTransaction": {"id": "77"}, "orderCreateTransaction": {"id": "76"}}
+        )
+
+    broker = OandaExecutionBroker(oanda_http(handler), "001-1")
+    await broker.place_market_order(
+        Symbol.EURUSD, 1000, take_profit=1.1298765, trailing_distance=0.00456789
+    )
+    order = captured["order"]
+    assert order["trailingStopLossOnFill"] == {"distance": "0.00457"}  # type: ignore[index]
+    assert "stopLossOnFill" not in order  # type: ignore[operator]
+    assert order["takeProfitOnFill"] == {"price": "1.12988"}  # type: ignore[index]
 
 
 async def test_oanda_execution_close_position() -> None:

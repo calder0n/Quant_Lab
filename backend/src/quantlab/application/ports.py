@@ -253,7 +253,15 @@ class ExecutionBroker(ABC):
         units: float,
         stop_loss: float | None = None,
         take_profit: float | None = None,
-    ) -> OrderResult: ...
+        trailing_distance: float | None = None,
+    ) -> OrderResult:
+        """Submit a market order. ``stop_loss``/``take_profit`` are absolute prices.
+
+        ``trailing_distance`` (a price *distance*, not a level) attaches a trailing
+        stop instead of a fixed one; when set, ``stop_loss`` should be ``None`` since
+        OANDA rejects a fixed and trailing stop on the same order.
+        """
+        ...
 
     @abstractmethod
     async def close_position(self, symbol: Symbol) -> OrderResult: ...

@@ -57,6 +57,7 @@ class OandaExecutionBroker(ExecutionBroker):
         units: float,
         stop_loss: float | None = None,
         take_profit: float | None = None,
+        trailing_distance: float | None = None,
     ) -> OrderResult:
         instrument = INSTRUMENTS[symbol]
         raw = await self._client.create_market_order(
@@ -65,6 +66,9 @@ class OandaExecutionBroker(ExecutionBroker):
             units,
             stop_loss_price=_format_price(symbol, stop_loss) if stop_loss else None,
             take_profit_price=_format_price(symbol, take_profit) if take_profit else None,
+            trailing_stop_distance=(
+                _format_price(symbol, trailing_distance) if trailing_distance else None
+            ),
         )
         fill = raw.get("orderFillTransaction")
         create = raw.get("orderCreateTransaction", {})

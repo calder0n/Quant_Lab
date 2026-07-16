@@ -98,8 +98,13 @@ class OandaClient:
         units: float,
         stop_loss_price: str | None = None,
         take_profit_price: str | None = None,
+        trailing_stop_distance: str | None = None,
     ) -> dict[str, Any]:
-        """Submit a market order; SL/TP attach to the resulting position on fill."""
+        """Submit a market order; SL/TP attach to the resulting position on fill.
+
+        ``trailing_stop_distance`` is a price distance; when given it attaches a
+        trailing stop (OANDA rejects it alongside a fixed ``stop_loss_price``).
+        """
         order: dict[str, Any] = {
             "type": "MARKET",
             "instrument": instrument,
@@ -109,6 +114,8 @@ class OandaClient:
         }
         if stop_loss_price is not None:
             order["stopLossOnFill"] = {"price": stop_loss_price}
+        if trailing_stop_distance is not None:
+            order["trailingStopLossOnFill"] = {"distance": trailing_stop_distance}
         if take_profit_price is not None:
             order["takeProfitOnFill"] = {"price": take_profit_price}
         response = await self._http.post(f"/v3/accounts/{account_id}/orders", json={"order": order})
