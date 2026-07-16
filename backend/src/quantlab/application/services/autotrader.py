@@ -121,8 +121,10 @@ class AutoTraderService:
             if await self._run_one(auto_trader, now):
                 processed.append(auto_trader)
 
+        # "evaluated" = assignments whose new bar we assessed this tick (an order is
+        # only placed when that bar carries a signal — see the per-assignment log).
         heartbeat.info(
-            "%s | kill-switch %s | %d enabled, %d acted this tick",
+            "%s | kill-switch %s | %d enabled, %d evaluated a new bar this tick",
             now.isoformat(timespec="seconds"),
             "ON" if globally_enabled else "OFF",
             len(due),

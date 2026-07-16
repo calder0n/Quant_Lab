@@ -226,7 +226,7 @@ async def test_run_tick_emits_a_heartbeat(caplog: pytest.LogCaptureFixture) -> N
     store[at.id] = at
     with caplog.at_level("INFO", logger="autotrader.heartbeat"):
         await service.run_tick(NOW)
-    assert any("kill-switch ON | 1 enabled, 1 acted" in m for m in caplog.messages)
+    assert any("kill-switch ON | 1 enabled, 1 evaluated a new bar" in m for m in caplog.messages)
 
 
 async def test_failed_execution_is_recorded_and_retries_next_tick() -> None:
