@@ -20,6 +20,7 @@ from quantlab.infrastructure.logging.redis_handler import (
 from quantlab.interfaces.api.deps import get_current_user
 from quantlab.interfaces.api.routes import (
     auth,
+    autotraders,
     backtests,
     datasets,
     health,
@@ -71,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         results.router,
         workers.router,
         trading.router,
+        autotraders.router,
     ):
         app.include_router(router, prefix=app_settings.api_v1_prefix, dependencies=authenticated)
     return app

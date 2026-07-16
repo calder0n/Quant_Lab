@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-quantlab-local-secret"
     access_token_ttl_minutes: int = 12 * 60
 
+    # Auto-trading worker: how often to check assignments for a newly closed bar.
+    autotrader_poll_seconds: int = 60
+
     # Market data storage
     data_dir: Path = Path("/data")
     history_start: date = date(2020, 1, 1)

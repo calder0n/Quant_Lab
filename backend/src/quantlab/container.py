@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from quantlab.application.event_bus import EventBus, InMemoryEventBus
 from quantlab.application.ports import (
     AuthRepository,
+    AutoTraderRepository,
     BacktestEngine,
     BrokerSettingsRepository,
     CandleStore,
@@ -31,6 +32,7 @@ from quantlab.application.ports import (
     ValidationRepository,
 )
 from quantlab.application.services.auth import AuthService
+from quantlab.application.services.autotrader import AutoTraderService
 from quantlab.application.services.backtesting import BacktestService
 from quantlab.application.services.data_ingestion import DataIngestionService
 from quantlab.application.services.ml import MlService
@@ -47,6 +49,7 @@ from quantlab.infrastructure.db.repositories.auth import (
     SqlAlchemyAuthRepository,
     SqlAlchemyTradingStateRepository,
 )
+from quantlab.infrastructure.db.repositories.autotrader import SqlAlchemyAutoTraderRepository
 from quantlab.infrastructure.db.repositories.broker_settings import (
     SqlAlchemyBrokerSettingsRepository,
 )
@@ -87,6 +90,7 @@ class Container:
         self._ml_service: MlService | None = None
         self._auth_service: AuthService | None = None
         self._trading_service: TradingService | None = None
+        self._auto_trader_service: AutoTraderService | None = None
         self._arq_pool: ArqRedis | None = None
 
     @property
@@ -314,6 +318,23 @@ class Container:
                 event_bus=self.event_bus,
             )
         return self._trading_service
+
+    @asynccontextmanager
+    async def auto_trader_repository(self) -> AsyncIterator[AutoTraderRepository]:
+        """Open a transactional scope over the auto-trading assignments."""
+        async with self.session_factory() as session, session.begin():
+            yield SqlAlchemyAutoTraderRepository(session)
+
+    @property
+    def auto_trader_service(self) -> AutoTraderService:
+        if self._auto_trader_service is None:
+            self._auto_trader_service = AutoTraderService(
+                repositories=self.auto_trader_repository,
+                states=self.trading_state_repository,
+                trading_service=self.trading_service,
+                registry=self.strategy_registry,
+            )
+        return self._auto_trader_service
 
     async def enqueue_training(self, model_id: uuid.UUID) -> None:
         """Queue one model training for execution by a worker."""

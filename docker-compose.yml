@@ -88,6 +88,27 @@ services:
         condition: service_healthy
     command: ["arq", "quantlab.interfaces.worker.settings.WorkerSettings"]
 
+  autotrader:
+    # Dedicated live-trading loop: polls OANDA and executes enabled assignments.
+    # Idle until the kill switch is on and at least one assignment is enabled.
+    image: quantlab-backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      QL_POSTGRES_HOST: postgres
+      QL_REDIS_HOST: redis
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/alembic:/app/alembic
+      - marketdata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "-m", "quantlab.interfaces.autotrader.runner"]
+
   frontend:
     build: ./frontend
     environment:

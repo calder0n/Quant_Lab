@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 from quantlab.domain.auth import ApiKey, User
+from quantlab.domain.autotrader import AutoTrader
 from quantlab.domain.backtest import BacktestResult, CostModel, OrderPlan
 from quantlab.domain.broker import BrokerCredentials
 from quantlab.domain.datasets import Dataset
@@ -212,6 +213,28 @@ class TradingStateRepository(ABC):
 
     @abstractmethod
     async def set_enabled(self, enabled: bool) -> TradingState: ...
+
+
+class AutoTraderRepository(ABC):
+    """Persistence port for automated-trading assignments."""
+
+    @abstractmethod
+    async def create(self, auto_trader: AutoTrader) -> AutoTrader: ...
+
+    @abstractmethod
+    async def get(self, auto_trader_id: uuid.UUID) -> AutoTrader | None: ...
+
+    @abstractmethod
+    async def list_all(self) -> list[AutoTrader]: ...
+
+    @abstractmethod
+    async def list_enabled(self) -> list[AutoTrader]: ...
+
+    @abstractmethod
+    async def update(self, auto_trader: AutoTrader) -> AutoTrader: ...
+
+    @abstractmethod
+    async def delete(self, auto_trader_id: uuid.UUID) -> None: ...
 
 
 class ExecutionBroker(ABC):

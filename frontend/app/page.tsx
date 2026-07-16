@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import AutoTradersPanel from "./components/AutoTradersPanel";
 import BacktestPanel from "./components/BacktestPanel";
 import BrokerSettingsPanel from "./components/BrokerSettingsPanel";
 import DatasetsPanel from "./components/DatasetsPanel";
@@ -161,6 +162,7 @@ export default function Home() {
       <ValidationsPanel />
       <MlPanel />
       <TradingPanel />
+      <AutoTradersPanel />
       <BacktestPanel />
       <LogsPanel />
       </LoginGate>
