@@ -4,6 +4,8 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 
 import { apiFetch } from "../lib/api";
 
+import SendToAutoTrader from "./SendToAutoTrader";
+
 type StrategyOption = { strategy_id: string; name: string };
 type DatasetOption = { symbol: string; timeframe: string; status: string };
 
@@ -297,6 +299,7 @@ export default function OptimizationsPanel() {
                                 <th className="py-1 text-right">Win%</th>
                                 <th className="py-1 text-right">Trades</th>
                                 <th className="py-1 pl-4 text-left">Params</th>
+                                <th className="py-1"></th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/40">
@@ -333,6 +336,14 @@ export default function OptimizationsPanel() {
                                         `${k}=${typeof v === "number" ? Number(v.toFixed(3)) : v}`,
                                       )
                                       .join(" ")}
+                                  </td>
+                                  <td className="py-1 pl-3 text-right">
+                                    <SendToAutoTrader
+                                      strategyId={study.strategy_id}
+                                      symbol={study.symbol}
+                                      timeframe={study.timeframe}
+                                      params={trial.params}
+                                    />
                                   </td>
                                 </tr>
                               ))}

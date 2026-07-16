@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 
 import PlotlyChart from "./PlotlyChart";
+import SendToAutoTrader from "./SendToAutoTrader";
 
 type HeatmapCell = { symbol: string; timeframe: string; best_score: number; studies: number };
 
@@ -117,6 +118,7 @@ export default function ResultsPanel() {
                   <th className="px-4 py-2 text-right">Sharpe</th>
                   <th className="px-4 py-2 text-right">MaxDD</th>
                   <th className="px-4 py-2 text-right">Trades</th>
+                  <th className="px-4 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-300">
@@ -147,6 +149,14 @@ export default function ResultsPanel() {
                       {(entry.metrics.max_drawdown * 100).toFixed(1)}%
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">{entry.metrics.trades}</td>
+                    <td className="px-4 py-2 text-right">
+                      <SendToAutoTrader
+                        strategyId={entry.strategy_id}
+                        symbol={entry.symbol}
+                        timeframe={entry.timeframe}
+                        params={entry.params}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>

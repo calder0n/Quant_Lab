@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
 
 import PlotlyChart from "./PlotlyChart";
+import SendToAutoTrader from "./SendToAutoTrader";
 
 type ParamSpec = {
   name: string;
@@ -374,12 +375,22 @@ export default function BacktestPanel() {
             {running ? "Running…" : "Run backtest"}
           </button>
           {result && (
-            <span className="ml-auto text-sm text-slate-400">
-              Fitness:{" "}
-              <span
-                className={`font-semibold ${result.fitness >= 0 ? "text-emerald-400" : "text-rose-400"}`}
-              >
-                {result.fitness.toFixed(4)}
+            <span className="ml-auto flex items-center gap-3 text-sm text-slate-400">
+              {dataset && (
+                <SendToAutoTrader
+                  strategyId={strategyId}
+                  symbol={dataset.split("|")[0]}
+                  timeframe={dataset.split("|")[1]}
+                  params={result.params}
+                />
+              )}
+              <span>
+                Fitness:{" "}
+                <span
+                  className={`font-semibold ${result.fitness >= 0 ? "text-emerald-400" : "text-rose-400"}`}
+                >
+                  {result.fitness.toFixed(4)}
+                </span>
               </span>
             </span>
           )}
