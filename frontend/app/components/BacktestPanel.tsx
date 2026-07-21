@@ -141,7 +141,13 @@ type ModelOption = {
   symbol: string;
   timeframe: string;
   status: string;
+  config: Record<string, number | string | boolean>;
 };
+
+// Triple-barrier labeling defaults the ML trainer uses when a model's config
+// omits them (see MlService._train_supervised).
+const modelSl = (m: ModelOption) => Number(m.config?.sl_atr ?? 2.0);
+const modelTp = (m: ModelOption) => Number(m.config?.tp_atr ?? 3.0);
 
 type Metrics = {
   total_return: number;
@@ -327,6 +333,26 @@ export default function BacktestPanel() {
     () => strategies.find((s) => s.strategy_id === strategyId),
     [strategies, strategyId],
   );
+
+  const selectedModel = useMemo(
+    () => models.find((m) => m.id === mlModelId),
+    [models, mlModelId],
+  );
+
+  // The ML filter is only coherent when the strategy's SL/TP match what the
+  // model was trained to predict. Flag the mismatch when the filter is active.
+  const mlMismatch = useMemo(() => {
+    if (!selectedModel || !params.use_ml_filter) return null;
+    const stratSl = Number(params.sl_atr);
+    const stratTp = Number(params.tp_atr);
+    const mSl = modelSl(selectedModel);
+    const mTp = modelTp(selectedModel);
+    const off = (a: number, b: number) => Math.abs(a - b) > 1e-6;
+    if (off(stratSl, mSl) || off(stratTp, mTp)) {
+      return { stratSl, stratTp, mSl, mTp };
+    }
+    return null;
+  }, [selectedModel, params]);
 
   useEffect(() => {
     try {
@@ -737,6 +763,25 @@ export default function BacktestPanel() {
 
         {strategy && (
           <p className="mt-3 text-xs text-slate-500">{strategy.description}</p>
+        )}
+
+        {mlMismatch && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            <span>
+              ⚠️ El modelo se entrenó con <b>SL {mlMismatch.mSl}·ATR / TP {mlMismatch.mTp}·ATR</b>,
+              pero la estrategia usa <b>SL {mlMismatch.stratSl}·ATR / TP {mlMismatch.stratTp}·ATR</b>.
+              La P(ganar) mide salidas distintas a las tuyas — el filtro pierde coherencia.
+            </span>
+            <button
+              onClick={() => {
+                setParam("sl_atr", mlMismatch.mSl);
+                setParam("tp_atr", mlMismatch.mTp);
+              }}
+              className="ml-auto whitespace-nowrap rounded border border-amber-500/40 bg-amber-500/15 px-2 py-1 font-medium text-amber-200 hover:bg-amber-500/25"
+            >
+              Alinear SL/TP al modelo
+            </button>
+          </div>
         )}
 
         {/* Parameter editor */}
