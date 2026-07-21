@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pandas as pd
 
@@ -17,10 +18,11 @@ from quantlab.application.event_bus import EventBus
 from quantlab.application.ports import (
     ExecutionBroker,
     MarketDataProvider,
+    TradeHistoryRepository,
     TradingStateRepository,
 )
 from quantlab.domain.broker import BrokerCredentials
-from quantlab.domain.market import Symbol, Timeframe
+from quantlab.domain.market import PIP_SIZE, Symbol, Timeframe
 from quantlab.domain.trading import (
     LIVE_CONFIRMATION,
     AccountSummary,
@@ -28,6 +30,7 @@ from quantlab.domain.trading import (
     OrderExecuted,
     OrderResult,
     Position,
+    TradeRecord,
     TradingDisabledError,
     TradingState,
 )
@@ -37,6 +40,7 @@ from quantlab.strategies.registry import StrategyRegistry
 logger = logging.getLogger(__name__)
 
 TradingStateRepositoryFactory = Callable[[], AbstractAsyncContextManager[TradingStateRepository]]
+TradeHistoryRepositoryFactory = Callable[[], AbstractAsyncContextManager[TradeHistoryRepository]]
 
 SIGNAL_LOOKBACK_BARS = 400
 
@@ -69,6 +73,8 @@ class TradingService:
         registry: StrategyRegistry,
         market_data: Callable[[], Awaitable[MarketDataProvider]],
         event_bus: EventBus,
+        trades: TradeHistoryRepositoryFactory | None = None,
+        ml_artifacts_dir: Path | None = None,
     ) -> None:
         self._states = states
         self._broker_factory = broker_factory
@@ -76,6 +82,8 @@ class TradingService:
         self._registry = registry
         self._market_data = market_data
         self._event_bus = event_bus
+        self._trades = trades
+        self._ml_artifacts_dir = ml_artifacts_dir
 
     async def status(self) -> TradingStatus:
         async with self._states() as repo:
@@ -120,6 +128,15 @@ class TradingService:
         )
         return state
 
+    async def history(
+        self, limit: int = 100, strategy_id: str | None = None
+    ) -> list[TradeRecord]:
+        """Recent executed orders, newest first."""
+        if self._trades is None:
+            return []
+        async with self._trades() as repo:
+            return await repo.list_recent(limit=limit, strategy_id=strategy_id)
+
     async def execute(
         self,
         strategy_id: str,
@@ -128,6 +145,8 @@ class TradingService:
         units: float,
         params: dict[str, ParamValue] | None = None,
         data: pd.DataFrame | None = None,
+        source: str = "manual",
+        ml_model_id: str | None = None,
     ) -> ExecutionReport:
         """Evaluate the strategy on broker candles and act on the last closed bar.
 
@@ -147,6 +166,11 @@ class TradingService:
             data = await provider.fetch_candles(symbol, timeframe, start, end)
         if len(data) < 50:
             raise ValueError(f"Only {len(data)} fresh bars available for {symbol} {timeframe}.")
+        data.attrs["pip_size"] = PIP_SIZE[symbol]  # lets order plans use pip distances
+        if ml_model_id and self._ml_artifacts_dir is not None:
+            from quantlab.infrastructure.ml.inference import load_win_predictor
+
+            data.attrs["ml_predictor"] = load_win_predictor(self._ml_artifacts_dir, ml_model_id)
 
         strategy = self._registry.create(strategy_id, params)
         signals = strategy.generate_signals(data)
@@ -173,38 +197,67 @@ class TradingService:
         trailing = plan.trailing
         trailing_distance = close * sl_pct if (trailing and sl_pct) else None
         orders: list[OrderResult] = []
+        records: list[TradeRecord] = []
         action = "none"
+
+        def history(
+            entry_action: str, order: OrderResult, sl: float | None, tp: float | None
+        ) -> None:
+            records.append(
+                TradeRecord(
+                    strategy_id=strategy_id,
+                    symbol=symbol,
+                    timeframe=timeframe.value,
+                    action=entry_action,
+                    units=order.units,
+                    source=source,
+                    entry_price=order.price if order.price is not None else close,
+                    sl_price=sl,
+                    tp_price=tp,
+                    trailing_distance=trailing_distance if entry_action != "closed" else None,
+                    realized_pl=order.realized_pl,
+                    order_id=order.order_id,
+                    filled=order.filled,
+                    detail=order.detail,
+                    signal_time=signal_time,
+                    params=dict(strategy.params),
+                )
+            )
 
         if bool(last["long_entry"]) and current_units <= 0:
             if current_units < 0:
-                orders.append(await broker.close_position(symbol))
-            orders.append(
-                await broker.place_market_order(
-                    symbol,
-                    abs(units),
-                    stop_loss=None if trailing else (close * (1 - sl_pct) if sl_pct else None),
-                    take_profit=close * (1 + tp_pct) if tp_pct else None,
-                    trailing_distance=trailing_distance,
-                )
+                closed = await broker.close_position(symbol)
+                orders.append(closed)
+                history("closed", closed, None, None)
+            sl = None if trailing else (close * (1 - sl_pct) if sl_pct else None)
+            tp = close * (1 + tp_pct) if tp_pct else None
+            opened = await broker.place_market_order(
+                symbol, abs(units), stop_loss=sl, take_profit=tp,
+                trailing_distance=trailing_distance,
             )
+            orders.append(opened)
+            history("opened_long", opened, sl, tp)
             action = "opened_long"
         elif bool(last["short_entry"]) and current_units >= 0:
             if current_units > 0:
-                orders.append(await broker.close_position(symbol))
-            orders.append(
-                await broker.place_market_order(
-                    symbol,
-                    -abs(units),
-                    stop_loss=None if trailing else (close * (1 + sl_pct) if sl_pct else None),
-                    take_profit=close * (1 - tp_pct) if tp_pct else None,
-                    trailing_distance=trailing_distance,
-                )
+                closed = await broker.close_position(symbol)
+                orders.append(closed)
+                history("closed", closed, None, None)
+            sl = None if trailing else (close * (1 + sl_pct) if sl_pct else None)
+            tp = close * (1 - tp_pct) if tp_pct else None
+            opened = await broker.place_market_order(
+                symbol, -abs(units), stop_loss=sl, take_profit=tp,
+                trailing_distance=trailing_distance,
             )
+            orders.append(opened)
+            history("opened_short", opened, sl, tp)
             action = "opened_short"
         elif (bool(last["long_exit"]) and current_units > 0) or (
             bool(last["short_exit"]) and current_units < 0
         ):
-            orders.append(await broker.close_position(symbol))
+            closed = await broker.close_position(symbol)
+            orders.append(closed)
+            history("closed", closed, None, None)
             action = "closed"
 
         if action != "none":
@@ -212,4 +265,12 @@ class TradingService:
             await self._event_bus.publish(
                 OrderExecuted(symbol=symbol, action=action, units=units, strategy_id=strategy_id)
             )
+            if self._trades is not None:
+                # History must never break execution: an insert failure only logs.
+                try:
+                    async with self._trades() as repo:
+                        for record in records:
+                            await repo.add(record)
+                except Exception:
+                    logger.exception("Failed to persist trade history for %s", strategy_id)
         return ExecutionReport(action=action, symbol=symbol, signal_time=signal_time, orders=orders)

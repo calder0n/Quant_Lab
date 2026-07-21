@@ -41,6 +41,37 @@ class OrderResult:
     filled: bool
     order_id: str
     detail: str = ""
+    price: float | None = None  # broker fill price, when the order filled
+    realized_pl: float | None = None  # realized P/L reported by the broker (closes)
+
+
+@dataclass
+class TradeRecord:
+    """One executed order, kept as local history.
+
+    The broker only shows live positions; this table remembers every execution
+    with the strategy that fired it and the exit levels it was given, so past
+    trades can be audited per strategy.
+    """
+
+    strategy_id: str
+    symbol: Symbol
+    timeframe: str
+    action: str  # opened_long | opened_short | closed
+    units: float
+    source: str = "manual"  # manual | autotrader
+    entry_price: float | None = None
+    sl_price: float | None = None
+    tp_price: float | None = None
+    trailing_distance: float | None = None
+    realized_pl: float | None = None
+    order_id: str = ""
+    filled: bool = False
+    detail: str | None = None
+    signal_time: str | None = None
+    params: dict[str, float | int | bool | str] = field(default_factory=dict)
+    id: uuid.UUID = field(default_factory=uuid.uuid4)
+    executed_at: datetime | None = None
 
 
 @dataclass

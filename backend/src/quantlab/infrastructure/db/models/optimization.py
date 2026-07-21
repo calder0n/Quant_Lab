@@ -24,6 +24,7 @@ class OptimizationStudyRecord(Base):
     objective: Mapped[dict[str, Any]] = mapped_column(JSON)
     best_score: Mapped[float | None] = mapped_column(Float)
     best_params: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    fixed_params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     seed: Mapped[int | None] = mapped_column(Integer)
     range_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     range_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

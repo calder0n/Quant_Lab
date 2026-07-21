@@ -2,15 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { AUTH_CHANGED_EVENT, apiFetch, getToken, setToken } from "../lib/api";
+import { AUTH_CHANGED_EVENT, getToken, setToken } from "../lib/api";
 
 type AuthStatus = { auth_enabled: boolean; initialized: boolean };
-type Me = { username: string; role: string };
 
 export default function LoginGate({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [hasToken, setHasToken] = useState(false);
-  const [me, setMe] = useState<Me | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -23,12 +21,6 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
       if (response.ok) setStatus(await response.json());
     } catch {
       setStatus(null);
-    }
-    if (getToken()) {
-      const meResponse = await apiFetch("/auth/me", { cache: "no-store" });
-      if (meResponse.ok) setMe(await meResponse.json());
-    } else {
-      setMe(null);
     }
   }, []);
 
@@ -109,22 +101,5 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return (
-    <>
-      <div className="mb-2 flex items-center justify-end gap-3 text-xs text-slate-500">
-        {me && (
-          <span>
-            {me.username} · <span className="uppercase">{me.role}</span>
-          </span>
-        )}
-        <button
-          onClick={() => setToken(null)}
-          className="rounded border border-slate-700 px-2 py-0.5 hover:bg-slate-800"
-        >
-          Sign out
-        </button>
-      </div>
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }

@@ -21,6 +21,20 @@ class Symbol(StrEnum):
     US30 = "US30"
 
 
+# One pip expressed in price units, per instrument (broker convention: 0.0001
+# for 4-decimal FX pairs, 0.01 for JPY pairs, 0.1 for gold, 1 point for indices).
+PIP_SIZE: dict[Symbol, float] = {
+    Symbol.EURUSD: 0.0001,
+    Symbol.GBPUSD: 0.0001,
+    Symbol.USDJPY: 0.01,
+    Symbol.AUDUSD: 0.0001,
+    Symbol.XAUUSD: 0.1,
+    Symbol.NAS100: 1.0,
+    Symbol.SPX500: 1.0,
+    Symbol.US30: 1.0,
+}
+
+
 class Timeframe(StrEnum):
     """Candle timeframes supported by the platform."""
 

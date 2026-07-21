@@ -32,6 +32,7 @@ def _study_to_entity(record: OptimizationStudyRecord) -> OptimizationStudy:
         objective=ObjectiveConfig.from_dict(record.objective),
         best_score=record.best_score,
         best_params=cast(dict[str, ParamValue] | None, record.best_params),
+        fixed_params=cast(dict[str, ParamValue], record.fixed_params or {}),
         seed=record.seed,
         range_start=record.range_start,
         range_end=record.range_end,
@@ -64,6 +65,7 @@ def _apply(record: OptimizationStudyRecord, study: OptimizationStudy) -> None:
     record.objective = study.objective.to_dict()
     record.best_score = study.best_score
     record.best_params = study.best_params
+    record.fixed_params = study.fixed_params
     record.seed = study.seed
     record.range_start = study.range_start
     record.range_end = study.range_end

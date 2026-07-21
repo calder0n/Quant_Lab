@@ -6,7 +6,7 @@ environment additionally requires the typed confirmation ``TRADE-LIVE``.
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from quantlab.application.services.trading import ExecutionReport, TradingStatus
@@ -16,6 +16,7 @@ from quantlab.domain.trading import (
     LiveConfirmationError,
     OrderResult,
     Position,
+    TradeRecord,
     TradingDisabledError,
 )
 from quantlab.interfaces.api.deps import AdminUser, ContainerDep, CurrentUser
@@ -83,6 +84,7 @@ class ExecuteIn(BaseModel):
     timeframe: Timeframe
     units: float = Field(gt=0, le=1_000_000)
     params: dict[str, ParamValue] | None = None
+    ml_model_id: str | None = None
 
 
 class OrderOut(BaseModel):
@@ -113,6 +115,62 @@ class ExecutionOut(BaseModel):
         )
 
 
+class TradeRecordOut(BaseModel):
+    id: str
+    executed_at: datetime | None
+    strategy_id: str
+    symbol: Symbol
+    timeframe: str
+    action: str
+    source: str
+    units: float
+    entry_price: float | None
+    sl_price: float | None
+    tp_price: float | None
+    trailing_distance: float | None
+    realized_pl: float | None
+    order_id: str
+    filled: bool
+    detail: str | None
+    signal_time: str | None
+    params: dict[str, ParamValue]
+
+    @classmethod
+    def from_entity(cls, record: TradeRecord) -> "TradeRecordOut":
+        return cls(
+            id=str(record.id),
+            executed_at=record.executed_at,
+            strategy_id=record.strategy_id,
+            symbol=record.symbol,
+            timeframe=record.timeframe,
+            action=record.action,
+            source=record.source,
+            units=record.units,
+            entry_price=record.entry_price,
+            sl_price=record.sl_price,
+            tp_price=record.tp_price,
+            trailing_distance=record.trailing_distance,
+            realized_pl=record.realized_pl,
+            order_id=record.order_id,
+            filled=record.filled,
+            detail=record.detail,
+            signal_time=record.signal_time,
+            params=record.params,
+        )
+
+
+@router.get("/history", response_model=list[TradeRecordOut])
+async def trade_history(
+    _: CurrentUser,
+    container: ContainerDep,
+    limit: int = Query(100, ge=1, le=500),
+    strategy_id: str | None = Query(None),
+) -> list[TradeRecordOut]:
+    """Locally recorded executions, newest first, with strategy and exit levels."""
+    records = await container.trading_service.history(limit=limit, strategy_id=strategy_id)
+    return [TradeRecordOut.from_entity(record) for record in records]
+
+
 @router.get("/status", response_model=TradingStatusOut)
 async def trading_status(_: CurrentUser, container: ContainerDep) -> TradingStatusOut:
     """Kill-switch state, account summary and open positions."""
@@ -139,6 +197,7 @@ async def execute(body: ExecuteIn, _: AdminUser, container: ContainerDep) -> Exe
             timeframe=body.timeframe,
             units=body.units,
             params=body.params,
+            ml_model_id=body.ml_model_id,
         )
     except TradingDisabledError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc

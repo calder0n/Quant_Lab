@@ -21,7 +21,13 @@ from quantlab.domain.datasets import Dataset
 from quantlab.domain.market import Symbol, Timeframe
 from quantlab.domain.ml import MlModel
 from quantlab.domain.optimization import OptimizationStudy, OptimizationTrial
-from quantlab.domain.trading import AccountSummary, OrderResult, Position, TradingState
+from quantlab.domain.trading import (
+    AccountSummary,
+    OrderResult,
+    Position,
+    TradeRecord,
+    TradingState,
+)
 from quantlab.domain.validation import ValidationRun
 from quantlab.strategies.base import ParameterSpec, ParamValue
 
@@ -213,6 +219,18 @@ class TradingStateRepository(ABC):
 
     @abstractmethod
     async def set_enabled(self, enabled: bool) -> TradingState: ...
+
+
+class TradeHistoryRepository(ABC):
+    """Persistence port for the local history of executed orders."""
+
+    @abstractmethod
+    async def add(self, record: TradeRecord) -> TradeRecord: ...
+
+    @abstractmethod
+    async def list_recent(
+        self, limit: int = 100, strategy_id: str | None = None
+    ) -> list[TradeRecord]: ...
 
 
 class AutoTraderRepository(ABC):

@@ -21,6 +21,7 @@ EXPECTED_STRATEGIES = {
     "order_blocks",
     "fair_value_gap",
     "liquidity_sweep",
+    "custom",
 }
 
 
@@ -29,7 +30,7 @@ def registry() -> StrategyRegistry:
     return StrategyRegistry().discover()
 
 
-def test_all_fifteen_strategies_are_discovered(registry: StrategyRegistry) -> None:
+def test_all_strategies_are_discovered(registry: StrategyRegistry) -> None:
     assert set(registry.ids()) == EXPECTED_STRATEGIES
 
 

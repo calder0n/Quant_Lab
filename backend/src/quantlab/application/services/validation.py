@@ -25,6 +25,7 @@ from quantlab.application.ports import (
 from quantlab.application.services.backtesting import MIN_BARS, DataNotAvailableError
 from quantlab.application.services.optimization import OptimizerFactory, UnknownOptimizerError
 from quantlab.domain.backtest import BacktestResult, CostModel
+from quantlab.domain.market import PIP_SIZE
 from quantlab.domain.objective import ObjectiveConfig, compute_score
 from quantlab.domain.optimization import StudyStatus
 from quantlab.domain.validation import (
@@ -105,6 +106,7 @@ class ValidationService:
         )
         try:
             data = await asyncio.to_thread(self._store.load, run.symbol, run.timeframe)
+            data.attrs["pip_size"] = PIP_SIZE[run.symbol]  # pip-distance SL/TP support
             if len(data) < MIN_BARS:
                 raise DataNotAvailableError(
                     f"Only {len(data)} bars available for {run.symbol} {run.timeframe}."

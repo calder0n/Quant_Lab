@@ -63,6 +63,7 @@ class AutoTraderService:
         timeframe: Timeframe,
         units: float,
         params: dict[str, ParamValue] | None = None,
+        ml_model_id: str | None = None,
     ) -> AutoTrader:
         """Register an assignment; validates the strategy and its parameters."""
         self._registry.create(strategy_id, params)  # raises on unknown id / bad params
@@ -72,6 +73,7 @@ class AutoTraderService:
             timeframe=timeframe,
             units=units,
             params=dict(params or {}),
+            ml_model_id=ml_model_id,
         )
         async with self._repositories() as repo:
             return await repo.create(auto_trader)
@@ -155,6 +157,8 @@ class AutoTraderService:
                 units=auto_trader.units,
                 params=auto_trader.params,
                 data=data,
+                source="autotrader",
+                ml_model_id=auto_trader.ml_model_id,
             )
             auto_trader.last_run = now
             auto_trader.last_signal_time = report.signal_time

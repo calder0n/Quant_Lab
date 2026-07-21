@@ -93,7 +93,10 @@ class FakeTradingService:
         units: float,
         params: dict[str, ParamValue] | None = None,
         data: pd.DataFrame | None = None,
+        source: str = "manual",
+        ml_model_id: str | None = None,
     ) -> ExecutionReport:
+        assert source == "autotrader"  # the worker must label its own executions
         self.calls.append(
             {"strategy": strategy_id, "symbol": symbol, "units": units, "params": params}
         )

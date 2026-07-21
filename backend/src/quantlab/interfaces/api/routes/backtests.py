@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from quantlab.application.services.backtesting import DataNotAvailableError
 from quantlab.domain.backtest import BacktestMetrics, BacktestResult, CostModel
 from quantlab.domain.market import Symbol, Timeframe
+from quantlab.infrastructure.ml.inference import ModelNotUsableError
 from quantlab.interfaces.api.deps import AdminUser, ContainerDep
 from quantlab.strategies.base import InvalidParameterError, ParamValue
 from quantlab.strategies.registry import UnknownStrategyError
@@ -30,6 +31,8 @@ class BacktestRequest(BaseModel):
     chart_bars: int = Field(400, ge=0, le=3000)
     initial_cash: float = Field(10_000.0, gt=0, le=1_000_000_000)
     months: int | None = Field(None, ge=1, le=360)
+    # Trained classification model to gate entries on when use_ml_filter is set.
+    ml_model_id: str | None = None
 
 
 class EquityPoint(BaseModel):
@@ -40,6 +43,8 @@ class EquityPoint(BaseModel):
 class MarkerOut(BaseModel):
     time: str
     price: float
+    sl: float | None = None
+    tp: float | None = None
 
 
 class ChartOut(BaseModel):
@@ -50,6 +55,8 @@ class ChartOut(BaseModel):
     close: list[float]
     overlays: dict[str, list[float | None]]
     markers: dict[str, list[MarkerOut]]
+    oscillators: dict[str, list[float | None]] = {}
+    downsample: int = 1
 
 
 class BacktestResponse(BaseModel):
@@ -80,9 +87,11 @@ class BacktestResponse(BaseModel):
                 close=result.chart.close,
                 overlays=result.chart.overlays,
                 markers={
-                    name: [MarkerOut(time=m.time, price=m.price) for m in points]
+                    name: [MarkerOut(time=m.time, price=m.price, sl=m.sl, tp=m.tp) for m in points]
                     for name, points in result.chart.markers.items()
                 },
+                oscillators=result.chart.oscillators,
+                downsample=result.chart.downsample,
             )
         return cls(
             strategy_id=request.strategy_id,
@@ -118,7 +127,10 @@ def run_backtest(
             chart_bars=request.chart_bars,
             initial_cash=request.initial_cash,
             months=request.months,
+            ml_model_id=request.ml_model_id,
         )
+    except ModelNotUsableError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except UnknownStrategyError as exc:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail=f"Unknown strategy: {exc.args[0]}"

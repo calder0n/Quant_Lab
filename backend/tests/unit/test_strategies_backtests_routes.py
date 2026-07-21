@@ -35,6 +35,7 @@ class FakeBacktestService:
         chart_bars: int | None = None,
         initial_cash: float | None = None,
         months: int | None = None,
+        ml_model_id: str | None = None,
     ) -> BacktestResult:
         if strategy_id == "nope":
             raise UnknownStrategyError("nope")
@@ -85,7 +86,7 @@ async def test_list_strategies_exposes_all_plugins(settings: Settings) -> None:
         response = await client.get("/api/v1/strategies")
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 15
+    assert len(body) == 16
     ema = next(s for s in body if s["strategy_id"] == "ema_cross")
     assert ema["name"] == "EMA Cross"
     param_names = {p["name"] for p in ema["parameters"]}

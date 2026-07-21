@@ -9,6 +9,7 @@ from quantlab.infrastructure.db.models.optimization import (
     OptimizationStudyRecord,
     OptimizationTrialRecord,
 )
+from quantlab.infrastructure.db.models.trade_history import TradeHistoryRecord
 from quantlab.infrastructure.db.models.validation import ValidationRunRecord
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "MlModelRecord",
     "OptimizationStudyRecord",
     "OptimizationTrialRecord",
+    "TradeHistoryRecord",
     "TradingStateRecord",
     "UserRecord",
     "ValidationRunRecord",

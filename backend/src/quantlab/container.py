@@ -28,6 +28,7 @@ from quantlab.application.ports import (
     MarketDataProvider,
     MlModelRepository,
     OptimizationRepository,
+    TradeHistoryRepository,
     TradingStateRepository,
     ValidationRepository,
 )
@@ -209,6 +210,7 @@ class Container:
                 store=self.candle_store,
                 registry=self.strategy_registry,
                 engine=self.backtest_engine,
+                ml_artifacts_dir=self._settings.data_dir / "models",
             )
         return self._backtest_service
 
@@ -306,6 +308,16 @@ class Container:
         client = OandaClient(api_token=credentials.api_token, environment=credentials.environment)
         return OandaExecutionBroker(client, credentials.account_id)
 
+    @asynccontextmanager
+    async def trade_history_repository(self) -> AsyncIterator[TradeHistoryRepository]:
+        """Open a transactional scope over the executed-order history."""
+        from quantlab.infrastructure.db.repositories.trade_history import (
+            SqlAlchemyTradeHistoryRepository,
+        )
+
+        async with self.session_factory() as session, session.begin():
+            yield SqlAlchemyTradeHistoryRepository(session)
+
     @property
     def trading_service(self) -> TradingService:
         if self._trading_service is None:
@@ -316,6 +328,8 @@ class Container:
                 registry=self.strategy_registry,
                 market_data=self.market_data_provider,
                 event_bus=self.event_bus,
+                trades=self.trade_history_repository,
+                ml_artifacts_dir=self._settings.data_dir / "models",
             )
         return self._trading_service
 

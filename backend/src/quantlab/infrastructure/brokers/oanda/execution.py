@@ -82,6 +82,7 @@ class OandaExecutionBroker(ExecutionBroker):
                 if fill
                 else str(raw.get("orderCancelTransaction", {}).get("reason", "created"))
             ),
+            price=float(fill["price"]) if fill and "price" in fill else None,
         )
 
     async def close_position(self, symbol: Symbol) -> OrderResult:
@@ -102,4 +103,6 @@ class OandaExecutionBroker(ExecutionBroker):
             filled=bool(fill),
             order_id=str(fill.get("id", "")),
             detail="closed",
+            price=float(fill["price"]) if "price" in fill else None,
+            realized_pl=float(fill["pl"]) if "pl" in fill else None,
         )

@@ -53,7 +53,15 @@ RISK_PARAMS: tuple[ParameterSpec, ...] = (
     ParameterSpec("atr_period", "int", 14, 5, 50, group="risk"),
     ParameterSpec("sl_atr", "float", 2.0, 0.5, 10.0, group="risk"),
     ParameterSpec("tp_atr", "float", 3.0, 0.5, 15.0, group="risk"),
+    # Fixed pip distances (0 = off). When set, they override the ATR-based
+    # distance for that leg; pip size comes from the instrument being traded.
+    ParameterSpec("sl_pips", "float", 0.0, 0.0, 100_000.0, group="risk"),
+    ParameterSpec("tp_pips", "float", 0.0, 0.0, 100_000.0, group="risk"),
     ParameterSpec("use_trailing", "bool", False, group="risk"),
+    # Cap SL/TP distance to this many *prior-day* daily-ATRs (0 = no cap). Keeps
+    # stops/targets within a realistic day's move instead of a far intraday-ATR
+    # multiple; uses the previous day's daily ATR so there is no lookahead.
+    ParameterSpec("max_atr_days", "float", 0.0, 0.0, 10.0, step=0.5, group="risk"),
     # Session-hour filter: only enter between session_start and session_end (UTC).
     ParameterSpec("use_session_filter", "bool", False, group="filter"),
     ParameterSpec("session_start", "int", 0, 0, 23, group="filter"),
@@ -67,6 +75,13 @@ RISK_PARAMS: tuple[ParameterSpec, ...] = (
     # Minimum-volatility filter: skip entries when ATR/price is below the threshold.
     ParameterSpec("use_volatility_filter", "bool", False, group="filter"),
     ParameterSpec("min_atr_pct", "float", 0.0005, 0.0, 0.02, step=0.0001, group="filter"),
+    # ML meta-labeling filter: only enter when a trained model's predicted
+    # probability of the trade winning is at least ``ml_threshold``. Which model
+    # is used is chosen at execution time (backtest/trade request), not here; the
+    # predictor is injected via ``data.attrs["ml_predictor"]``. Without a model
+    # attached this filter is a no-op even when enabled.
+    ParameterSpec("use_ml_filter", "bool", False, group="filter"),
+    ParameterSpec("ml_threshold", "float", 0.5, 0.0, 1.0, step=0.01, group="filter"),
 )
 
 
@@ -131,11 +146,49 @@ class Strategy(ABC):
         """Return a boolean frame with columns ``SIGNAL_COLUMNS`` aligned to ``data``."""
 
     def generate_orders(self, data: pd.DataFrame, signals: pd.DataFrame) -> OrderPlan:
-        """Default execution plan: ATR-multiple stop loss / take profit."""
+        """Default execution plan: ATR-multiple stop loss / take profit.
+
+        When ``max_atr_days`` is set, both the SL and TP distances are capped to
+        that many daily ATRs so they never reach further than a realistic day's
+        move (the far intraday-ATR targets that never fill). ``sl_pips`` /
+        ``tp_pips`` (when > 0) replace the ATR-based distance for that leg with a
+        fixed pip distance; the instrument's pip size is provided by the caller
+        via ``data.attrs["pip_size"]``.
+        """
         average_range = ta.atr(data, int(self.params["atr_period"]))
-        sl_pct = (float(self.params["sl_atr"]) * average_range / data["close"]).clip(lower=1e-6)
-        tp_pct = (float(self.params["tp_atr"]) * average_range / data["close"]).clip(lower=1e-6)
+        sl_dist = float(self.params["sl_atr"]) * average_range
+        tp_dist = float(self.params["tp_atr"]) * average_range
+        max_atr_days = float(self.params["max_atr_days"])
+        if max_atr_days > 0:
+            # ``clip(upper=cap)`` is elementwise; a NaN cap (early bars with no
+            # prior day yet) leaves that bar's distance unclipped.
+            cap = max_atr_days * self._daily_atr(data)
+            sl_dist = sl_dist.clip(upper=cap)
+            tp_dist = tp_dist.clip(upper=cap)
+        pip_size = float(data.attrs.get("pip_size", 0.0))
+        if pip_size > 0:
+            if float(self.params["sl_pips"]) > 0:
+                sl_dist = pd.Series(float(self.params["sl_pips"]) * pip_size, index=data.index)
+            if float(self.params["tp_pips"]) > 0:
+                tp_dist = pd.Series(float(self.params["tp_pips"]) * pip_size, index=data.index)
+        sl_pct = (sl_dist / data["close"]).clip(lower=1e-6)
+        tp_pct = (tp_dist / data["close"]).clip(lower=1e-6)
         return OrderPlan(sl_pct=sl_pct, tp_pct=tp_pct, trailing=bool(self.params["use_trailing"]))
+
+    def _daily_atr(self, data: pd.DataFrame) -> pd.Series:
+        """Previous day's daily ATR, forward-filled onto the intraday index.
+
+        Resamples to daily bars, takes the ATR, then shifts by one day so each
+        intraday bar only sees days that have already closed (no lookahead).
+        """
+        assert isinstance(data.index, pd.DatetimeIndex)
+        daily = (
+            data.resample("1D")
+            .agg({"high": "max", "low": "min", "close": "last"})
+            .dropna()
+        )
+        prior_day_atr = ta.atr(daily, int(self.params["atr_period"])).shift(1)
+        return prior_day_atr.reindex(data.index, method="ffill")
 
     def fitness(self, metrics: BacktestMetrics) -> float:
         """Default composite score, bounded to roughly [-1, 1].
@@ -219,6 +272,14 @@ class Strategy(ABC):
         if bool(self.params["use_volatility_filter"]):
             atr_pct = self.atr(data) / data["close"]
             allowed &= (atr_pct >= float(self.params["min_atr_pct"])).fillna(False)
+        if bool(self.params["use_ml_filter"]):
+            predictor = data.attrs.get("ml_predictor")
+            if predictor is not None:
+                # predictor(data) -> P(win) per bar (NaN where features are not
+                # yet available); require it to clear the confidence threshold.
+                win_proba = predictor(data)
+                threshold = float(self.params["ml_threshold"])
+                allowed &= (win_proba >= threshold).reindex(index).fillna(False)
         return allowed
 
     def chart_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:

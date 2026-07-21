@@ -32,6 +32,10 @@ class OptimizationStudy:
     trials_completed: int = 0
     best_score: float | None = None
     best_params: dict[str, float | int | bool | str] | None = None
+    # Parameters pinned by the user: excluded from the search space and merged
+    # into every trial (e.g. fix the custom strategy's components and only
+    # optimize the numeric risk parameters).
+    fixed_params: dict[str, float | int | bool | str] = field(default_factory=dict)
     seed: int | None = None
     range_start: datetime | None = None
     range_end: datetime | None = None

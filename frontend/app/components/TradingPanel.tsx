@@ -165,7 +165,8 @@ export default function TradingPanel() {
         )}
 
         {status && status.positions.length > 0 && (
-          <table className="mb-4 w-full text-left text-xs">
+          <div className="mb-4 overflow-x-auto">
+          <table className="w-full text-left text-xs">
             <thead className="text-slate-500">
               <tr>
                 <th className="py-1">Instrument</th>
@@ -191,6 +192,7 @@ export default function TradingPanel() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">

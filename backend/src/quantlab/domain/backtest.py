@@ -55,10 +55,17 @@ class BacktestMetrics:
 
 @dataclass(frozen=True)
 class ChartMarker:
-    """A signal firing on the price chart (entry or exit)."""
+    """A signal firing on the price chart (entry or exit).
+
+    Entry markers also carry the stop-loss/take-profit price levels the order
+    plan dictated at that bar, so the dashboard can draw where each trade's
+    exits were placed. Exit markers leave them ``None``.
+    """
 
     time: str
     price: float
+    sl: float | None = None
+    tp: float | None = None
 
 
 @dataclass
@@ -78,6 +85,11 @@ class BacktestChart:
     close: list[float] = field(default_factory=list)
     overlays: dict[str, list[float | None]] = field(default_factory=dict)
     markers: dict[str, list[ChartMarker]] = field(default_factory=dict)
+    # Oscillator panes drawn below the price chart (e.g. RSI), 0-100 scale.
+    oscillators: dict[str, list[float | None]] = field(default_factory=dict)
+    # How many raw bars each chart bar aggregates (1 = no aggregation). >1 when
+    # the backtested range exceeds the chart's bar budget.
+    downsample: int = 1
 
 
 @dataclass

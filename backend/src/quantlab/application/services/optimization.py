@@ -27,6 +27,7 @@ from quantlab.application.ports import (
 )
 from quantlab.application.services.backtesting import MIN_BARS, DataNotAvailableError
 from quantlab.domain.backtest import BacktestMetrics, CostModel
+from quantlab.domain.market import PIP_SIZE
 from quantlab.domain.objective import PENALTY_SCORE, compute_score
 from quantlab.domain.optimization import (
     OptimizationStudy,
@@ -110,11 +111,17 @@ class OptimizationService:
         data = await asyncio.to_thread(
             self._store.load, study.symbol, study.timeframe, study.range_start, study.range_end
         )
+        data.attrs["pip_size"] = PIP_SIZE[study.symbol]  # pip-distance SL/TP support
         if len(data) < MIN_BARS:
             raise DataNotAvailableError(
                 f"Only {len(data)} bars available for {study.symbol} {study.timeframe}."
             )
-        space = self._registry.get(study.strategy_id).metadata().parameters
+        # Pinned parameters leave the search space; every trial inherits them.
+        space = tuple(
+            spec
+            for spec in self._registry.get(study.strategy_id).metadata().parameters
+            if spec.name not in study.fixed_params
+        )
         optimizer = self._optimizers[study.optimizer]()
         loop = asyncio.get_running_loop()
         evaluate = self._build_evaluator(study, data, loop)
@@ -125,7 +132,9 @@ class OptimizationService:
 
         study.status = StudyStatus.COMPLETED
         study.best_score = outcome.best_score
-        study.best_params = dict(outcome.best_params)
+        # The optimizer only saw the reduced space; surface the full parameter
+        # set (pinned values included) so "send to auto-trader" carries them.
+        study.best_params = {**outcome.best_params, **study.fixed_params}
         study.trials_completed = outcome.trials_completed
         study.message = None
         study = await self._save(study)
@@ -154,6 +163,7 @@ class OptimizationService:
 
         def evaluate(params: dict[str, ParamValue]) -> float:
             counter["number"] += 1
+            params = {**params, **study.fixed_params}
             try:
                 strategy = self._registry.create(study.strategy_id, params)
                 signals = strategy.generate_signals(data)

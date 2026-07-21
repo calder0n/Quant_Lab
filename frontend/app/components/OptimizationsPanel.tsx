@@ -6,8 +6,18 @@ import { apiFetch } from "../lib/api";
 
 import SendToAutoTrader from "./SendToAutoTrader";
 
-type StrategyOption = { strategy_id: string; name: string };
+type ParamSpec = {
+  name: string;
+  kind: "int" | "float" | "bool" | "categorical";
+  default: number | boolean | string;
+  low: number | null;
+  high: number | null;
+  choices: string[] | null;
+  group: string;
+};
+type StrategyOption = { strategy_id: string; name: string; parameters: ParamSpec[] };
 type DatasetOption = { symbol: string; timeframe: string; status: string };
+type ParamValue = number | boolean | string;
 
 type Study = {
   id: string;
@@ -55,6 +65,9 @@ export default function OptimizationsPanel() {
   const [dataset, setDataset] = useState("");
   const [optimizer, setOptimizer] = useState("optuna");
   const [trials, setTrials] = useState(200);
+  // Params pinned to a value (excluded from the search); rest get optimized.
+  const [fixed, setFixed] = useState<Record<string, ParamValue>>({});
+  const [showFixed, setShowFixed] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -69,6 +82,35 @@ export default function OptimizationsPanel() {
       })
       .catch(() => undefined);
   }, []);
+
+  const strategy = strategies.find((s) => s.strategy_id === strategyId);
+
+  // On strategy switch: for the custom composite, pin its structure by default
+  // (component toggles + vote mode) so the optimizer tunes numbers, not the mix.
+  useEffect(() => {
+    if (!strategy) return;
+    if (strategy.strategy_id === "custom") {
+      setFixed(
+        Object.fromEntries(
+          strategy.parameters
+            .filter((p) => p.name.startsWith("use_") || p.name === "combine")
+            .map((p) => [p.name, p.default]),
+        ),
+      );
+      setShowFixed(true);
+    } else {
+      setFixed({});
+    }
+  }, [strategy]);
+
+  const togglePin = (spec: ParamSpec) => {
+    setFixed((prev) => {
+      const next = { ...prev };
+      if (spec.name in next) delete next[spec.name];
+      else next[spec.name] = spec.default;
+      return next;
+    });
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -114,6 +156,7 @@ export default function OptimizationsPanel() {
           timeframe,
           optimizer,
           n_trials: trials,
+          fixed_params: fixed,
         }),
       });
       const body = await response.json();
@@ -223,6 +266,13 @@ export default function OptimizationsPanel() {
             />
           </label>
           <button
+            onClick={() => setShowFixed((v) => !v)}
+            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-400 transition hover:text-slate-200"
+            title="Fijar parámetros a un valor: quedan fuera de la búsqueda"
+          >
+            Parámetros · {Object.keys(fixed).length} fijos
+          </button>
+          <button
             onClick={launch}
             disabled={launching || !strategyId || !dataset || !workers?.online}
             title={workers?.online ? undefined : "Start the worker container first"}
@@ -231,6 +281,83 @@ export default function OptimizationsPanel() {
             {launching ? "Launching…" : "Launch study"}
           </button>
         </div>
+
+        {showFixed && strategy && (
+          <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+            <p className="mb-3 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+              Marca un parámetro para <span className="text-sky-400">fijarlo</span> a un valor (no
+              se optimiza); los desmarcados los explora el optimizador dentro de sus rangos
+            </p>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+              {strategy.parameters.map((spec) => {
+                const pinned = spec.name in fixed;
+                const value = fixed[spec.name];
+                return (
+                  <div key={spec.name} className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={pinned}
+                      onChange={() => togglePin(spec)}
+                      className="h-3.5 w-3.5 shrink-0 accent-[#2b6ef2]"
+                    />
+                    <span
+                      className={`w-40 truncate font-mono text-[11px] ${
+                        pinned ? "text-slate-200" : "text-slate-500"
+                      }`}
+                      title={spec.name}
+                    >
+                      {spec.name}
+                    </span>
+                    {!pinned ? (
+                      <span className="text-[10px] italic text-slate-600">se optimiza</span>
+                    ) : spec.kind === "bool" ? (
+                      <input
+                        type="checkbox"
+                        checked={Boolean(value)}
+                        onChange={(e) =>
+                          setFixed((prev) => ({ ...prev, [spec.name]: e.target.checked }))
+                        }
+                        className="h-3.5 w-3.5 accent-emerald-500"
+                      />
+                    ) : spec.kind === "categorical" ? (
+                      <select
+                        className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200"
+                        value={String(value)}
+                        onChange={(e) =>
+                          setFixed((prev) => ({ ...prev, [spec.name]: e.target.value }))
+                        }
+                      >
+                        {(spec.choices ?? []).map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="number"
+                        className="w-24 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200"
+                        value={Number(value)}
+                        min={spec.low ?? undefined}
+                        max={spec.high ?? undefined}
+                        step={spec.kind === "int" ? 1 : "any"}
+                        onChange={(e) =>
+                          setFixed((prev) => ({
+                            ...prev,
+                            [spec.name]:
+                              spec.kind === "int"
+                                ? Math.round(Number(e.target.value))
+                                : Number(e.target.value),
+                          }))
+                        }
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
       </div>
 

@@ -64,23 +64,28 @@ def test_run_produces_scored_result(service: tuple[BacktestService, FakeEngine])
 
 
 def test_run_builds_inspection_chart(service: tuple[BacktestService, FakeEngine]) -> None:
-    backtest_service, _ = service
+    backtest_service, _ = service  # store holds 300 bars
     result = backtest_service.run("ema_cross", Symbol.EURUSD, Timeframe.H1, chart_bars=120)
     chart = result.chart
     assert chart is not None
-    assert len(chart.time) == len(chart.close) == 120  # windowed to the last N bars
+    # 300 bars over a 120-bar budget aggregates 3:1, covering the whole range.
+    assert chart.downsample == 3
+    assert len(chart.time) == len(chart.close) == 100
     assert chart.overlays.keys() == {"EMA fast", "EMA slow"}
-    assert len(chart.overlays["EMA fast"]) == 120
+    assert len(chart.overlays["EMA fast"]) == 100
     assert set(chart.markers) == {"long_entry", "long_exit", "short_entry", "short_exit"}
     for points in chart.markers.values():
         for marker in points:
-            assert marker.time in chart.time  # markers land on real candles
+            assert marker.time in chart.time  # markers snap to an aggregated bar
 
 
-def test_chart_window_caps_at_available_bars(service: tuple[BacktestService, FakeEngine]) -> None:
+def test_chart_covers_full_range_without_aggregation_when_it_fits(
+    service: tuple[BacktestService, FakeEngine],
+) -> None:
     backtest_service, _ = service  # store holds 300 bars
     result = backtest_service.run("rsi", Symbol.EURUSD, Timeframe.H1, chart_bars=10_000)
     assert result.chart is not None
+    assert result.chart.downsample == 1  # fits the budget: every bar shown
     assert len(result.chart.time) == 300
     assert result.chart.overlays == {}  # rsi is an oscillator: markers only
 

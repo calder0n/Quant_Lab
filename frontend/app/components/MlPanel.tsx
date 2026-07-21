@@ -90,6 +90,10 @@ export default function MlPanel() {
   const [target, setTarget] = useState("win");
   const [algorithm, setAlgorithm] = useState("xgboost");
   const [dataset, setDataset] = useState("");
+  // Triple-barrier labeling config (what "a winning trade" means for the model).
+  const [horizon, setHorizon] = useState(12);
+  const [slAtr, setSlAtr] = useState(2.0);
+  const [tpAtr, setTpAtr] = useState(3.0);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -136,7 +140,7 @@ export default function MlPanel() {
           algorithm: kind === "ml" ? algorithm : "ppo",
           symbol,
           timeframe,
-          config: {},
+          config: kind === "ml" ? { horizon, sl_atr: slAtr, tp_atr: tpAtr } : {},
         }),
       });
       const body = await response.json();
@@ -203,6 +207,50 @@ export default function MlPanel() {
                     </option>
                   ))}
                 </select>
+              </label>
+              <label
+                className="flex flex-col gap-1 text-xs text-slate-400"
+                title="Nº de velas hacia delante que el etiquetado mira para decidir si el trade habría ganado"
+              >
+                Horizon (velas)
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  className={`${selectClass} w-20`}
+                  value={horizon}
+                  onChange={(e) => setHorizon(Math.round(Number(e.target.value)))}
+                />
+              </label>
+              <label
+                className="flex flex-col gap-1 text-xs text-slate-400"
+                title="Barrera de pérdida del etiquetado triple-barrier, en múltiplos de ATR (igual que sl_atr en las estrategias)"
+              >
+                SL (×ATR)
+                <input
+                  type="number"
+                  min={0.5}
+                  max={10}
+                  step={0.5}
+                  className={`${selectClass} w-20`}
+                  value={slAtr}
+                  onChange={(e) => setSlAtr(Number(e.target.value))}
+                />
+              </label>
+              <label
+                className="flex flex-col gap-1 text-xs text-slate-400"
+                title="Barrera de ganancia del etiquetado triple-barrier, en múltiplos de ATR (igual que tp_atr en las estrategias)"
+              >
+                TP (×ATR)
+                <input
+                  type="number"
+                  min={0.5}
+                  max={15}
+                  step={0.5}
+                  className={`${selectClass} w-20`}
+                  value={tpAtr}
+                  onChange={(e) => setTpAtr(Number(e.target.value))}
+                />
               </label>
             </>
           )}

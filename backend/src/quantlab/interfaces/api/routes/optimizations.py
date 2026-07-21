@@ -11,7 +11,7 @@ from quantlab.domain.market import Symbol, Timeframe
 from quantlab.domain.objective import InvalidObjectiveError, ObjectiveConfig
 from quantlab.domain.optimization import OptimizationStudy, OptimizationTrial, StudyStatus
 from quantlab.interfaces.api.deps import AdminUser, ContainerDep
-from quantlab.strategies.base import ParamValue
+from quantlab.strategies.base import InvalidParameterError, ParamValue
 from quantlab.strategies.registry import UnknownStrategyError
 
 router = APIRouter(prefix="/optimizations", tags=["optimizations"])
@@ -44,6 +44,9 @@ class StudyCreate(BaseModel):
     seed: int | None = None
     start: datetime | None = None
     end: datetime | None = None
+    # Parameters pinned to a value: excluded from the search space and merged
+    # into every trial (e.g. the custom strategy's component toggles).
+    fixed_params: dict[str, ParamValue] = Field(default_factory=dict)
 
 
 class StudyOut(BaseModel):
@@ -97,11 +100,14 @@ class TrialOut(BaseModel):
 async def create_study(request: StudyCreate, container: ContainerDep, _: AdminUser) -> StudyOut:
     """Persist a study and queue it for execution by a worker."""
     try:
-        container.strategy_registry.get(request.strategy_id)
+        # Instantiating with the pinned params validates their names and ranges.
+        container.strategy_registry.create(request.strategy_id, request.fixed_params)
     except UnknownStrategyError as exc:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail=f"Unknown strategy: {request.strategy_id}"
         ) from exc
+    except InvalidParameterError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     if request.optimizer not in container.optimization_service.optimizer_names:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -125,6 +131,7 @@ async def create_study(request: StudyCreate, container: ContainerDep, _: AdminUs
         optimizer=request.optimizer,
         n_trials=request.n_trials,
         objective=objective,
+        fixed_params=dict(request.fixed_params),
         seed=request.seed,
         range_start=request.start,
         range_end=request.end,

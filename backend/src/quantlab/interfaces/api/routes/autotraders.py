@@ -26,6 +26,7 @@ class AutoTraderCreate(BaseModel):
     timeframe: Timeframe
     units: float = Field(gt=0, le=1_000_000)
     params: dict[str, ParamValue] = Field(default_factory=dict)
+    ml_model_id: str | None = None
 
 
 class ToggleIn(BaseModel):
@@ -39,6 +40,7 @@ class AutoTraderOut(BaseModel):
     timeframe: Timeframe
     units: float
     params: dict[str, ParamValue]
+    ml_model_id: str | None
     enabled: bool
     last_run: datetime | None
     last_signal_time: str | None
@@ -56,6 +58,7 @@ class AutoTraderOut(BaseModel):
             timeframe=at.timeframe,
             units=at.units,
             params=at.params,
+            ml_model_id=at.ml_model_id,
             enabled=at.enabled,
             last_run=at.last_run,
             last_signal_time=at.last_signal_time,
@@ -87,6 +90,7 @@ async def create_autotrader(
             timeframe=body.timeframe,
             units=body.units,
             params=body.params,
+            ml_model_id=body.ml_model_id,
         )
     except UnknownStrategyError as exc:
         raise HTTPException(
