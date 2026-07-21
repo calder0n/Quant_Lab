@@ -56,13 +56,12 @@ class CustomComposite(Strategy):
         "to combine their entries (any / majority / all), with the shared risk and "
         "filter parameters applied on top. Components run with their default settings."
     )
-    PARAMS = tuple(
-        ParameterSpec(f"use_{component.strategy_id}", "bool", component is EmaCross)
-        for component in COMPONENTS
-    ) + (
-        ParameterSpec(
-            "combine", "categorical", "any", choices=("any", "majority", "all")
+    PARAMS = (
+        *(
+            ParameterSpec(f"use_{component.strategy_id}", "bool", component is EmaCross)
+            for component in COMPONENTS
         ),
+        ParameterSpec("combine", "categorical", "any", choices=("any", "majority", "all")),
         # RSI component tunables, forwarded when use_rsi is on (same bounds as
         # the standalone RSI strategy).
         ParameterSpec("rsi_period", "int", 14, 2, 50),

@@ -2,6 +2,7 @@
 
 import math
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -123,11 +124,16 @@ class BacktestService:
     """Runs one strategy over one locally stored dataset."""
 
     def __init__(
-        self, store: CandleStore, registry: StrategyRegistry, engine: BacktestEngine
+        self,
+        store: CandleStore,
+        registry: StrategyRegistry,
+        engine: BacktestEngine,
+        ml_artifacts_dir: Path | None = None,
     ) -> None:
         self._store = store
         self._registry = registry
         self._engine = engine
+        self._ml_artifacts_dir = ml_artifacts_dir
 
     def run(
         self,
@@ -141,6 +147,7 @@ class BacktestService:
         chart_bars: int | None = None,
         initial_cash: float | None = None,
         months: int | None = None,
+        ml_model_id: str | None = None,
     ) -> BacktestResult:
         coverage = self._store.coverage(symbol, timeframe)
         if coverage is None:
@@ -152,6 +159,10 @@ class BacktestService:
             start = (pd.Timestamp(coverage.end) - pd.DateOffset(months=months)).to_pydatetime()
         data = self._store.load(symbol, timeframe, start=start, end=end)
         data.attrs["pip_size"] = PIP_SIZE[symbol]  # lets order plans use pip distances
+        if ml_model_id and self._ml_artifacts_dir is not None:
+            from quantlab.infrastructure.ml.inference import load_win_predictor
+
+            data.attrs["ml_predictor"] = load_win_predictor(self._ml_artifacts_dir, ml_model_id)
         if len(data) < MIN_BARS:
             raise DataNotAvailableError(
                 f"Only {len(data)} bars available for {symbol} {timeframe} in that range."

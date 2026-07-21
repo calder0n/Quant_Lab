@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pandas as pd
 
@@ -73,6 +74,7 @@ class TradingService:
         market_data: Callable[[], Awaitable[MarketDataProvider]],
         event_bus: EventBus,
         trades: TradeHistoryRepositoryFactory | None = None,
+        ml_artifacts_dir: Path | None = None,
     ) -> None:
         self._states = states
         self._broker_factory = broker_factory
@@ -81,6 +83,7 @@ class TradingService:
         self._market_data = market_data
         self._event_bus = event_bus
         self._trades = trades
+        self._ml_artifacts_dir = ml_artifacts_dir
 
     async def status(self) -> TradingStatus:
         async with self._states() as repo:
@@ -143,6 +146,7 @@ class TradingService:
         params: dict[str, ParamValue] | None = None,
         data: pd.DataFrame | None = None,
         source: str = "manual",
+        ml_model_id: str | None = None,
     ) -> ExecutionReport:
         """Evaluate the strategy on broker candles and act on the last closed bar.
 
@@ -163,6 +167,10 @@ class TradingService:
         if len(data) < 50:
             raise ValueError(f"Only {len(data)} fresh bars available for {symbol} {timeframe}.")
         data.attrs["pip_size"] = PIP_SIZE[symbol]  # lets order plans use pip distances
+        if ml_model_id and self._ml_artifacts_dir is not None:
+            from quantlab.infrastructure.ml.inference import load_win_predictor
+
+            data.attrs["ml_predictor"] = load_win_predictor(self._ml_artifacts_dir, ml_model_id)
 
         strategy = self._registry.create(strategy_id, params)
         signals = strategy.generate_signals(data)
@@ -192,7 +200,9 @@ class TradingService:
         records: list[TradeRecord] = []
         action = "none"
 
-        def history(entry_action: str, order: OrderResult, sl: float | None, tp: float | None) -> None:
+        def history(
+            entry_action: str, order: OrderResult, sl: float | None, tp: float | None
+        ) -> None:
             records.append(
                 TradeRecord(
                     strategy_id=strategy_id,

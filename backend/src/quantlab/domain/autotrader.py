@@ -22,6 +22,9 @@ class AutoTrader:
     timeframe: Timeframe
     units: float
     params: dict[str, ParamValue] = field(default_factory=dict)
+    # Trained classification model to gate entries on when the strategy's
+    # ``use_ml_filter`` param is set; ``None`` disables the ML filter.
+    ml_model_id: str | None = None
     enabled: bool = False
     # Bookkeeping (updated by the worker on each processed bar):
     last_bucket: int | None = None  # timeframe bucket already acted on (dedup per bar)

@@ -13,6 +13,7 @@ type AutoTrader = {
   timeframe: string;
   units: number;
   params: Record<string, number | string | boolean>;
+  ml_model_id: string | null;
   enabled: boolean;
   last_run: string | null;
   last_signal_time: string | null;
@@ -219,6 +220,14 @@ export default function AutoTradersPanel() {
                 <tr key={at.id} className="hover:bg-slate-800/30" title={at.message ?? undefined}>
                   <td className="px-4 py-2.5 font-medium" title={JSON.stringify(at.params)}>
                     {at.strategy_id}
+                    {at.ml_model_id && (
+                      <span
+                        className="ml-1.5 rounded border border-violet-500/30 bg-violet-500/10 px-1 py-0.5 text-[9px] font-normal text-violet-300"
+                        title={`Filtro ML activo · modelo ${at.ml_model_id.slice(0, 8)}`}
+                      >
+                        ML
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5 text-slate-400">
                     {at.symbol} · {at.timeframe}

@@ -35,6 +35,7 @@ class FakeBacktestService:
         chart_bars: int | None = None,
         initial_cash: float | None = None,
         months: int | None = None,
+        ml_model_id: str | None = None,
     ) -> BacktestResult:
         if strategy_id == "nope":
             raise UnknownStrategyError("nope")

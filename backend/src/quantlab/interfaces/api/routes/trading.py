@@ -84,6 +84,7 @@ class ExecuteIn(BaseModel):
     timeframe: Timeframe
     units: float = Field(gt=0, le=1_000_000)
     params: dict[str, ParamValue] | None = None
+    ml_model_id: str | None = None
 
 
 class OrderOut(BaseModel):
@@ -196,6 +197,7 @@ async def execute(body: ExecuteIn, _: AdminUser, container: ContainerDep) -> Exe
             timeframe=body.timeframe,
             units=body.units,
             params=body.params,
+            ml_model_id=body.ml_model_id,
         )
     except TradingDisabledError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc

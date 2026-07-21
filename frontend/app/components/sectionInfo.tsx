@@ -147,9 +147,18 @@ export const SECTION_INFO: Record<string, { title: string; body: React.ReactNode
         <InfoH>Cómo interpretarlo</InfoH>
         <InfoTerm term="Accuracy / F1">calidad de clasificación fuera de muestra. En mercados, apenas superar el 50% ya puede ser útil si la gestión de riesgo acompaña.</InfoTerm>
         <InfoTerm term="Top features">qué variables pesan más en el modelo — útil para entender qué está &quot;mirando&quot;.</InfoTerm>
-        <p className="mt-3 text-slate-400">
-          Trata los modelos ML con el mismo escepticismo que una estrategia optimizada: exige
-          validación out-of-sample antes de darles dinero real.
+        <InfoH>Cómo se usan de verdad (meta-labeling)</InfoH>
+        <p className="mb-2">
+          Un modelo de tipo <strong>win</strong> se puede usar como <strong>filtro de entrada</strong>{" "}
+          de cualquier estrategia: en el Backtest, elige el modelo en «Filtro ML» y activa{" "}
+          <em>use_ml_filter</em> con un <em>ml_threshold</em>. La estrategia solo tomará las
+          entradas donde el modelo prediga alta probabilidad de ganar — menos operaciones, pero de
+          más calidad. El mismo filtro viaja al auto-trader (badge «ML» en la tabla).
+        </p>
+        <p className="text-slate-400">
+          Calibra el umbral a cada modelo: si se entrenó con TP lejano, su P(ganar) es baja y
+          umbrales de 0.20-0.30 ya filtran mucho. Y trata los modelos con el mismo escepticismo que
+          una estrategia optimizada: valida out-of-sample antes de darles dinero real.
         </p>
       </>
     ),

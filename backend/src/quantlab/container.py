@@ -210,6 +210,7 @@ class Container:
                 store=self.candle_store,
                 registry=self.strategy_registry,
                 engine=self.backtest_engine,
+                ml_artifacts_dir=self._settings.data_dir / "models",
             )
         return self._backtest_service
 
@@ -328,6 +329,7 @@ class Container:
                 market_data=self.market_data_provider,
                 event_bus=self.event_bus,
                 trades=self.trade_history_repository,
+                ml_artifacts_dir=self._settings.data_dir / "models",
             )
         return self._trading_service
 

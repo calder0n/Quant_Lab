@@ -75,6 +75,13 @@ RISK_PARAMS: tuple[ParameterSpec, ...] = (
     # Minimum-volatility filter: skip entries when ATR/price is below the threshold.
     ParameterSpec("use_volatility_filter", "bool", False, group="filter"),
     ParameterSpec("min_atr_pct", "float", 0.0005, 0.0, 0.02, step=0.0001, group="filter"),
+    # ML meta-labeling filter: only enter when a trained model's predicted
+    # probability of the trade winning is at least ``ml_threshold``. Which model
+    # is used is chosen at execution time (backtest/trade request), not here; the
+    # predictor is injected via ``data.attrs["ml_predictor"]``. Without a model
+    # attached this filter is a no-op even when enabled.
+    ParameterSpec("use_ml_filter", "bool", False, group="filter"),
+    ParameterSpec("ml_threshold", "float", 0.5, 0.0, 1.0, step=0.01, group="filter"),
 )
 
 
@@ -265,6 +272,14 @@ class Strategy(ABC):
         if bool(self.params["use_volatility_filter"]):
             atr_pct = self.atr(data) / data["close"]
             allowed &= (atr_pct >= float(self.params["min_atr_pct"])).fillna(False)
+        if bool(self.params["use_ml_filter"]):
+            predictor = data.attrs.get("ml_predictor")
+            if predictor is not None:
+                # predictor(data) -> P(win) per bar (NaN where features are not
+                # yet available); require it to clear the confidence threshold.
+                win_proba = predictor(data)
+                threshold = float(self.params["ml_threshold"])
+                allowed &= (win_proba >= threshold).reindex(index).fillna(False)
         return allowed
 
     def chart_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:

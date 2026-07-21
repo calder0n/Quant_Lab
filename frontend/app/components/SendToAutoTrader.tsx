@@ -17,11 +17,13 @@ export default function SendToAutoTrader({
   symbol,
   timeframe,
   params,
+  mlModelId,
 }: {
   strategyId: string;
   symbol: string;
   timeframe: string;
   params: Record<string, ParamValue>;
+  mlModelId?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [units, setUnits] = useState(SMALL_UNIT_SYMBOLS.has(symbol) ? 1 : 1000);
@@ -34,7 +36,14 @@ export default function SendToAutoTrader({
       const res = await apiFetch("/autotraders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ strategy_id: strategyId, symbol, timeframe, units, params }),
+        body: JSON.stringify({
+          strategy_id: strategyId,
+          symbol,
+          timeframe,
+          units,
+          params,
+          ml_model_id: mlModelId ?? null,
+        }),
       });
       const body = await res.json();
       if (!res.ok) {

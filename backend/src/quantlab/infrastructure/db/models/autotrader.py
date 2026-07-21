@@ -19,6 +19,7 @@ class AutoTraderRecord(Base):
     timeframe: Mapped[str] = mapped_column(String(5))
     units: Mapped[float] = mapped_column(Float)
     params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    ml_model_id: Mapped[str | None] = mapped_column(String(64))
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     last_bucket: Mapped[int | None] = mapped_column(BigInteger)
     last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

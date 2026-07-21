@@ -128,6 +128,28 @@ def test_default_orders_scale_with_atr_params() -> None:
     )
 
 
+def test_ml_filter_gates_entries_on_predicted_win_probability() -> None:
+    data = make_market_data(200)
+    baseline = DummyStrategy().generate_signals(data)["long_entry"].sum()
+    assert baseline > 0
+
+    # A predictor that scores every bar below the threshold blocks all entries;
+    # one that scores every bar above keeps them. The predictor is injected the
+    # same way the services do it, via ``data.attrs``.
+    data.attrs["ml_predictor"] = lambda d: pd.Series(0.10, index=d.index)
+    blocked = DummyStrategy(use_ml_filter=True, ml_threshold=0.5).generate_signals(data)
+    assert blocked["long_entry"].sum() == 0
+
+    data.attrs["ml_predictor"] = lambda d: pd.Series(0.90, index=d.index)
+    allowed = DummyStrategy(use_ml_filter=True, ml_threshold=0.5).generate_signals(data)
+    assert allowed["long_entry"].sum() == baseline
+
+    # Enabled but no model attached: the filter is a no-op, not an error.
+    del data.attrs["ml_predictor"]
+    no_model = DummyStrategy(use_ml_filter=True, ml_threshold=0.5).generate_signals(data)
+    assert no_model["long_entry"].sum() == baseline
+
+
 def test_default_fitness_behaviour() -> None:
     strategy = DummyStrategy()
     assert strategy.fitness(BacktestMetrics(trades=0)) == -1.0

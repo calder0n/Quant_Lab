@@ -59,6 +59,10 @@ const PARAM_DOCS: Record<string, string> = {
     "Bloquea entradas cuando la volatilidad (ATR/precio) es demasiado baja — mercados dormidos donde el coste fijo pesa más que el movimiento esperado.",
   min_atr_pct:
     "Umbral del filtro de volatilidad: ATR mínimo como fracción del precio (0.0005 = 0.05%) para permitir entrar.",
+  use_ml_filter:
+    "Filtro de meta-labeling: solo permite la entrada si un modelo ML entrenado predice P(ganar) ≥ ml_threshold. El modelo se elige arriba en 'Filtro ML'; sin modelo asignado, este filtro no hace nada.",
+  ml_threshold:
+    "Confianza mínima P(ganar) que el modelo debe dar para permitir la entrada. Ojo: calíbralo a la distribución del modelo — si se entrenó con TP lejano, su P(ganar) es baja y umbrales de 0.20-0.30 ya filtran mucho.",
   // Strategy-specific
   fast_period: "Periodo de la media/línea rápida. Cruzar por encima de la lenta genera la señal alcista.",
   slow_period: "Periodo de la media/línea lenta, la referencia de tendencia del cruce.",
@@ -131,6 +135,13 @@ type StrategyInfo = {
 };
 
 type DatasetOption = { symbol: string; timeframe: string; status: string };
+type ModelOption = {
+  id: string;
+  target: string;
+  symbol: string;
+  timeframe: string;
+  status: string;
+};
 
 type Metrics = {
   total_return: number;
@@ -303,6 +314,9 @@ export default function BacktestPanel() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BacktestResponse | null>(null);
+  // Trained "win" classification models available as meta-labeling filters.
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [mlModelId, setMlModelId] = useState("");
   // Chart-level filters (UTC): zoom the chart to a date range and/or hour band.
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -336,6 +350,12 @@ export default function BacktestPanel() {
         if (ready.length > 0) setDataset(`${ready[0].symbol}|${ready[0].timeframe}`);
       })
       .catch(() => setDatasets([]));
+    apiFetch("/ml/models", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: ModelOption[]) =>
+        setModels(list.filter((m) => m.status === "completed" && m.target === "win")),
+      )
+      .catch(() => setModels([]));
   }, []);
 
   // Reset the editable parameters to the strategy's declared defaults on switch.
@@ -385,6 +405,7 @@ export default function BacktestPanel() {
           chart_bars: 400,
           initial_cash: initialCash > 0 ? initialCash : 10000,
           months: months ? Number(months) : null,
+          ml_model_id: mlModelId || null,
         }),
       });
       const body = await response.json();
@@ -616,6 +637,24 @@ export default function BacktestPanel() {
               <option value="36">Last 36 months</option>
             </select>
           </label>
+          <label
+            className="flex items-center gap-1.5 text-xs text-slate-400"
+            title="Filtro de meta-labeling: solo entra donde el modelo predice alta probabilidad de ganar. Requiere activar use_ml_filter y ajustar ml_threshold en los parámetros."
+          >
+            Filtro ML
+            <select
+              className={selectClass}
+              value={mlModelId}
+              onChange={(e) => setMlModelId(e.target.value)}
+            >
+              <option value="">Ninguno</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  win · {m.symbol} {m.timeframe} · {m.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             onClick={runBacktest}
             disabled={running || !strategyId || !dataset}
@@ -631,6 +670,7 @@ export default function BacktestPanel() {
                   symbol={dataset.split("|")[0]}
                   timeframe={dataset.split("|")[1]}
                   params={result.params}
+                  mlModelId={mlModelId || null}
                 />
               )}
               <span>
