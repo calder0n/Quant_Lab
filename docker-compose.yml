@@ -1,0 +1,127 @@
+name: quantlab
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${QL_POSTGRES_USER:-quantlab}
+      POSTGRES_PASSWORD: ${QL_POSTGRES_PASSWORD:-quantlab}
+      POSTGRES_DB: ${QL_POSTGRES_DB:-quantlab}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # 5433 on the host to avoid clashing with a locally installed PostgreSQL
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${QL_POSTGRES_USER:-quantlab} -d ${QL_POSTGRES_DB:-quantlab}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    image: quantlab-backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      QL_POSTGRES_HOST: postgres
+      QL_REDIS_HOST: redis
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/tests:/app/tests
+      - ./backend/alembic:/app/alembic
+      - ./backend/scripts:/app/scripts
+      - marketdata:/data
+    ports:
+      # 8080 on the host: 8000 is taken by another local project (fable_api)
+      - "127.0.0.1:8080:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command:
+      [
+        "uvicorn",
+        "quantlab.interfaces.api.app:create_app",
+        "--factory",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
+
+  worker:
+    # Same image as the API (built once by the api service): a worker running
+    # different code/dependencies than the API is a deployment bug.
+    image: quantlab-backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      QL_POSTGRES_HOST: postgres
+      QL_REDIS_HOST: redis
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/tests:/app/tests
+      - ./backend/alembic:/app/alembic
+      - ./backend/scripts:/app/scripts
+      - marketdata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["arq", "quantlab.interfaces.worker.settings.WorkerSettings"]
+
+  autotrader:
+    # Dedicated live-trading loop: polls OANDA and executes enabled assignments.
+    # Idle until the kill switch is on and at least one assignment is enabled.
+    image: quantlab-backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      QL_POSTGRES_HOST: postgres
+      QL_REDIS_HOST: redis
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/alembic:/app/alembic
+      - marketdata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "-m", "quantlab.interfaces.autotrader.runner"]
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://api:8000
+    volumes:
+      - ./frontend/app:/app/app
+      - ./frontend/next.config.ts:/app/next.config.ts
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  redisdata:
+  marketdata:

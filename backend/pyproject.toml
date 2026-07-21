@@ -1,0 +1,118 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantlab"
+version = "0.1.0"
+description = "Quantitative research laboratory: massive strategy discovery, optimization and validation."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "redis>=5.2",
+    "httpx>=0.28",
+    "pandas>=2.2",
+    "pyarrow>=18.0",
+    "vectorbt>=0.27",
+    "optuna>=4.0",
+    "arq>=0.26",
+    "scikit-learn>=1.5",
+    "xgboost>=2.1",
+    "lightgbm>=4.5",
+    "catboost>=1.2.7",
+    "torch>=2.4",
+    "joblib>=1.4",
+    "gymnasium>=1.0",
+    "stable-baselines3>=2.4",
+    "pyjwt>=2.9",
+    "bcrypt>=4.2",
+    "cryptography>=43.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "black>=24.10",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pandas-stubs>=2.2",
+    "aiosqlite>=0.20",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # simplify
+    "C4",  # comprehensions
+    "PTH", # pathlib
+    "RUF", # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["quantlab"]
+exclude = ["alembic/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "vectorbt.*",
+    "numba.*",
+    "xgboost.*",
+    "lightgbm.*",
+    "catboost.*",
+    "sklearn.*",
+    "joblib.*",
+    "gymnasium.*",
+    "stable_baselines3.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--cov=quantlab --cov-report=term-missing --cov-fail-under=90"
+markers = [
+    "integration: requires live PostgreSQL/Redis (runs inside docker compose)",
+]
+
+[tool.coverage.run]
+source = ["quantlab"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

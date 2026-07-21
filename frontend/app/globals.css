@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  /* Polymarket-style palette */
+  --bg: #0b0e14;
+  --bg-elevated: #12161f;
+  --panel: #141922;
+  --border: #222a38;
+  --accent: #2b6ef2;
+  --accent-hover: #4685ff;
+  --accent-soft: rgba(43, 110, 242, 0.14);
+}
+
+body {
+  background: var(--bg);
+  /* Wide content (tables, charts) scrolls inside its own card; the page itself
+     never scrolls sideways, which also keeps the centered layout visually centered.
+     ``clip`` (not ``hidden``) so the sticky header keeps working. */
+  overflow-x: clip;
+}
+
+/* Hide scrollbar on the horizontal category nav while keeping it scrollable */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
