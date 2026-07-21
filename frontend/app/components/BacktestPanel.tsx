@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiFetch } from "../lib/api";
 
@@ -142,6 +142,15 @@ type ModelOption = {
   timeframe: string;
   status: string;
   config: Record<string, number | string | boolean>;
+};
+type StudyOption = {
+  id: string;
+  strategy_id: string;
+  symbol: string;
+  timeframe: string;
+  status: string;
+  best_score: number | null;
+  best_params: Record<string, number | string | boolean> | null;
 };
 
 // Triple-barrier labeling defaults the ML trainer uses when a model's config
@@ -323,6 +332,12 @@ export default function BacktestPanel() {
   // Trained "win" classification models available as meta-labeling filters.
   const [models, setModels] = useState<ModelOption[]>([]);
   const [mlModelId, setMlModelId] = useState("");
+  // Completed optimization studies whose best params can be loaded here.
+  const [studies, setStudies] = useState<StudyOption[]>([]);
+  const [loadedStudy, setLoadedStudy] = useState<string | null>(null);
+  // Best params to apply *after* a strategy switch settles (the switch resets
+  // params to defaults, so loading a study defers the values through this ref).
+  const pendingParams = useRef<Record<string, ParamValue> | null>(null);
   // Chart-level filters (UTC): zoom the chart to a date range and/or hour band.
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -382,12 +397,48 @@ export default function BacktestPanel() {
         setModels(list.filter((m) => m.status === "completed" && m.target === "win")),
       )
       .catch(() => setModels([]));
+    apiFetch("/optimizations", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: StudyOption[]) =>
+        setStudies(list.filter((s) => s.status === "completed" && s.best_params)),
+      )
+      .catch(() => setStudies([]));
   }, []);
 
-  // Reset the editable parameters to the strategy's declared defaults on switch.
+  // Reset the editable parameters to the strategy's declared defaults on switch —
+  // unless a study load is pending, in which case apply its best params on top.
   useEffect(() => {
-    setParams(defaultParams(strategy));
+    const base = defaultParams(strategy);
+    if (pendingParams.current) {
+      setParams({ ...base, ...pendingParams.current });
+      pendingParams.current = null;
+    } else {
+      setParams(base);
+    }
   }, [strategy]);
+
+  // Load an optimization's winning parameters into the editor (and match its
+  // strategy + dataset). Unknown keys are dropped so the backtest never 422s.
+  const loadStudy = useCallback(
+    (study: StudyOption) => {
+      const strat = strategies.find((s) => s.strategy_id === study.strategy_id);
+      if (!strat || !study.best_params) return;
+      const valid = new Set(strat.parameters.map((p) => p.name));
+      const best = Object.fromEntries(
+        Object.entries(study.best_params).filter(([k]) => valid.has(k)),
+      ) as Record<string, ParamValue>;
+      const ds = `${study.symbol}|${study.timeframe}`;
+      if (datasets.some((d) => `${d.symbol}|${d.timeframe}` === ds)) setDataset(ds);
+      if (study.strategy_id === strategyId) {
+        setParams({ ...defaultParams(strat), ...best }); // strategy unchanged: apply now
+      } else {
+        pendingParams.current = best; // strategy switch resets, then applies these
+        setStrategyId(study.strategy_id);
+      }
+      setLoadedStudy(study.id);
+    },
+    [strategies, datasets, strategyId],
+  );
 
   const visibleStrategies = useMemo(
     () => strategies.filter((s) => !excluded.includes(s.strategy_id)),
@@ -411,6 +462,7 @@ export default function BacktestPanel() {
 
   const setParam = useCallback((name: string, value: ParamValue) => {
     setParams((prev) => ({ ...prev, [name]: value }));
+    setLoadedStudy(null); // a manual edit means the params no longer match a study
   }, []);
 
   const runBacktest = async () => {
@@ -763,6 +815,35 @@ export default function BacktestPanel() {
 
         {strategy && (
           <p className="mt-3 text-xs text-slate-500">{strategy.description}</p>
+        )}
+
+        {studies.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <span>Cargar parámetros de una optimización:</span>
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200"
+              value=""
+              onChange={(e) => {
+                const s = studies.find((x) => x.id === e.target.value);
+                if (s) loadStudy(s);
+              }}
+            >
+              <option value="">— elige un estudio —</option>
+              {studies.map((s) => {
+                const name =
+                  strategies.find((st) => st.strategy_id === s.strategy_id)?.name ?? s.strategy_id;
+                return (
+                  <option key={s.id} value={s.id}>
+                    {name} · {s.symbol} {s.timeframe} · score{" "}
+                    {s.best_score != null ? s.best_score.toFixed(3) : "—"}
+                  </option>
+                );
+              })}
+            </select>
+            {loadedStudy && (
+              <span className="text-emerald-400">✓ mejores parámetros cargados</span>
+            )}
+          </div>
         )}
 
         {mlMismatch && (
