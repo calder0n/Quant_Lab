@@ -14,6 +14,7 @@ type AutoTrader = {
   units: number;
   params: Record<string, number | string | boolean>;
   ml_model_id: string | null;
+  realized_pl: number;
   enabled: boolean;
   last_run: string | null;
   last_signal_time: string | null;
@@ -210,6 +211,9 @@ export default function AutoTradersPanel() {
                 <th className="px-4 py-3">Market</th>
                 <th className="px-4 py-3 text-right">Units</th>
                 <th className="px-4 py-3">State</th>
+                <th className="px-4 py-3 text-right" title="P/L realizado de las operaciones cerradas de esta estrategia">
+                  P&amp;L
+                </th>
                 <th className="px-4 py-3">Last run</th>
                 <th className="px-4 py-3">Last action</th>
                 <th className="px-4 py-3"></th>
@@ -244,6 +248,19 @@ export default function AutoTradersPanel() {
                     >
                       {at.enabled ? "enabled" : "disabled"}
                     </button>
+                  </td>
+                  <td
+                    className={`px-4 py-2.5 text-right tabular-nums ${
+                      at.realized_pl > 0
+                        ? "text-emerald-400"
+                        : at.realized_pl < 0
+                          ? "text-rose-400"
+                          : "text-slate-500"
+                    }`}
+                    title="P/L realizado (operaciones cerradas)"
+                  >
+                    {at.realized_pl > 0 ? "+" : ""}
+                    {at.realized_pl.toFixed(2)}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-500">
                     {at.last_run ? at.last_run.replace("T", " ").slice(0, 16) : "—"}

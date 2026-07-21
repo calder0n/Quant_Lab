@@ -232,6 +232,13 @@ class TradeHistoryRepository(ABC):
         self, limit: int = 100, strategy_id: str | None = None
     ) -> list[TradeRecord]: ...
 
+    @abstractmethod
+    async def realized_pnl_by_assignment(
+        self, source: str | None = None
+    ) -> dict[tuple[str, str, str], float]:
+        """Sum of realized P/L keyed by (strategy_id, symbol, timeframe)."""
+        ...
+
 
 class AutoTraderRepository(ABC):
     """Persistence port for automated-trading assignments."""

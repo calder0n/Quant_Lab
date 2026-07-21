@@ -2,7 +2,7 @@
 
 from typing import cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from quantlab.application.ports import TradeHistoryRepository
@@ -74,3 +74,20 @@ class SqlAlchemyTradeHistoryRepository(TradeHistoryRepository):
             query = query.where(TradeHistoryRecord.strategy_id == strategy_id)
         result = await self._session.execute(query.limit(limit))
         return [_to_entity(row) for row in result.scalars()]
+
+    async def realized_pnl_by_assignment(
+        self, source: str | None = None
+    ) -> dict[tuple[str, str, str], float]:
+        r = TradeHistoryRecord
+        query = (
+            select(r.strategy_id, r.symbol, r.timeframe, func.sum(r.realized_pl))
+            .where(r.realized_pl.is_not(None))
+            .group_by(r.strategy_id, r.symbol, r.timeframe)
+        )
+        if source is not None:
+            query = query.where(r.source == source)
+        result = await self._session.execute(query)
+        return {
+            (strategy_id, symbol, timeframe): float(total)
+            for strategy_id, symbol, timeframe, total in result.all()
+        }
