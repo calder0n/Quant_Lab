@@ -16,7 +16,9 @@ next-env.d.ts
 
 # Environment & data
 .env
-data/
+# Anchored to the repo root so it only ignores the runtime data dir — not the
+# source package quantlab/infrastructure/data.
+/data/
 
 # OS / editors
 .DS_Store
