@@ -56,6 +56,20 @@ const STATUS_STYLES: Record<Study["status"], string> = {
   failed: "bg-rose-500/15 text-rose-400 border-rose-500/30",
 };
 
+// What the optimizer maximizes. "balanced" (empty weights) uses the backend
+// default; the rest are weightings over the same normalized metrics.
+const OBJECTIVES: {
+  key: string;
+  label: string;
+  weights: Record<string, number>;
+}[] = [
+  { key: "balanced", label: "Balanceado (Sharpe · PF · drawdown)", weights: {} },
+  { key: "winrate_guarded", label: "Win rate (con piso de rentabilidad)", weights: { win_rate: 0.7, profit_factor: 0.3 } },
+  { key: "winrate_pure", label: "Win rate puro ⚠️", weights: { win_rate: 1.0 } },
+  { key: "return", label: "Rentabilidad (retorno · PF)", weights: { total_return: 0.5, profit_factor: 0.5 } },
+  { key: "lowrisk", label: "Bajo riesgo (Calmar · drawdown)", weights: { calmar: 0.5, max_drawdown: 0.5 } },
+];
+
 export default function OptimizationsPanel() {
   const [strategies, setStrategies] = useState<StrategyOption[]>([]);
   const [datasets, setDatasets] = useState<DatasetOption[]>([]);
@@ -65,6 +79,7 @@ export default function OptimizationsPanel() {
   const [dataset, setDataset] = useState("");
   const [optimizer, setOptimizer] = useState("optuna");
   const [trials, setTrials] = useState(200);
+  const [objective, setObjective] = useState("balanced");
   // Params pinned to a value (excluded from the search); rest get optimized.
   const [fixed, setFixed] = useState<Record<string, ParamValue>>({});
   const [showFixed, setShowFixed] = useState(false);
@@ -157,6 +172,10 @@ export default function OptimizationsPanel() {
           optimizer,
           n_trials: trials,
           fixed_params: fixed,
+          // "balanced" → omit so the backend applies its default objective.
+          ...(objective !== "balanced"
+            ? { objective: { weights: OBJECTIVES.find((o) => o.key === objective)?.weights } }
+            : {}),
         }),
       });
       const body = await response.json();
@@ -255,6 +274,21 @@ export default function OptimizationsPanel() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Objetivo
+            <select
+              className={inputClass}
+              value={objective}
+              onChange={(e) => setObjective(e.target.value)}
+              title="Qué maximiza el optimizador al ajustar los parámetros"
+            >
+              {OBJECTIVES.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
             Trials
             <input
               type="number"
@@ -281,6 +315,14 @@ export default function OptimizationsPanel() {
             {launching ? "Launching…" : "Launch study"}
           </button>
         </div>
+        {objective === "winrate_pure" && (
+          <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            ⚠️ Optimizar solo por win rate favorece estrategias con TP diminuto y SL enorme: ganan
+            casi siempre pero una sola pérdida se come muchas ganancias (expectativa negativa). Para
+            operar en real, prefiere <b>Win rate con piso de rentabilidad</b> — exige win rate alto{" "}
+            <em>y</em> que no pierda dinero.
+          </p>
+        )}
 
         {showFixed && strategy && (
           <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-4">
