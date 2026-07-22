@@ -6,6 +6,7 @@ the typed confirmation ``TRADE-LIVE``. The platform never enables itself.
 """
 
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
@@ -43,6 +44,17 @@ TradingStateRepositoryFactory = Callable[[], AbstractAsyncContextManager[Trading
 TradeHistoryRepositoryFactory = Callable[[], AbstractAsyncContextManager[TradeHistoryRepository]]
 
 SIGNAL_LOOKBACK_BARS = 400
+
+
+def _parse_broker_time(value: str) -> datetime | None:
+    """Parse an OANDA RFC3339 timestamp (may carry nanoseconds and a trailing Z)."""
+    if not value:
+        return None
+    text = re.sub(r"(\.\d{6})\d+", r"\1", value.replace("Z", "+00:00"))
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 @dataclass(frozen=True)
@@ -140,6 +152,13 @@ class TradingService:
         async with self._trades() as repo:
             return await repo.list_recent(limit=limit, strategy_id=strategy_id)
 
+    async def pnl_by_day(self) -> dict[str, float]:
+        """Realized P/L summed per UTC day, for the calendar view."""
+        if self._trades is None:
+            return {}
+        async with self._trades() as repo:
+            return await repo.realized_pnl_by_day()
+
     async def reconcile_broker_closes(self) -> int:
         """Record broker-side closes (TP/SL/trailing) into history.
 
@@ -183,6 +202,7 @@ class TradingService:
                             signal_time=opened.signal_time,
                             broker_trade_id=close.trade_id,
                             params=opened.params,
+                            executed_at=_parse_broker_time(close.time),
                         )
                     )
                     recorded += 1

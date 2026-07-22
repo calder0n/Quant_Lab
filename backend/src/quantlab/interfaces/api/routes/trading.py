@@ -159,6 +159,12 @@ class TradeRecordOut(BaseModel):
         )
 
 
+@router.get("/pnl-daily", response_model=dict[str, float])
+async def pnl_daily(_: CurrentUser, container: ContainerDep) -> dict[str, float]:
+    """Realized P/L per UTC day (``YYYY-MM-DD`` → total) for the P&L calendar."""
+    return await container.trading_service.pnl_by_day()
+
+
 @router.get("/history", response_model=list[TradeRecordOut])
 async def trade_history(
     _: CurrentUser,

@@ -1,5 +1,6 @@
 """SQLAlchemy implementation of the trade history port."""
 
+from datetime import UTC
 from typing import cast
 
 from sqlalchemy import func, select
@@ -62,6 +63,9 @@ class SqlAlchemyTradeHistoryRepository(TradeHistoryRepository):
             signal_time=record.signal_time,
             broker_trade_id=record.broker_trade_id,
             params=dict(record.params),
+            # Honor an explicit time (e.g. a broker close's own timestamp);
+            # otherwise the column defaults to now() at insert.
+            **({"executed_at": record.executed_at} if record.executed_at is not None else {}),
         )
         self._session.add(row)
         await self._session.flush()
@@ -93,6 +97,22 @@ class SqlAlchemyTradeHistoryRepository(TradeHistoryRepository):
             (strategy_id, symbol, timeframe): float(total)
             for strategy_id, symbol, timeframe, total in result.all()
         }
+
+    async def realized_pnl_by_day(self) -> dict[str, float]:
+        # Aggregated in Python (portable across Postgres/SQLite) over UTC dates.
+        result = await self._session.execute(
+            select(TradeHistoryRecord.executed_at, TradeHistoryRecord.realized_pl).where(
+                TradeHistoryRecord.realized_pl.is_not(None)
+            )
+        )
+        totals: dict[str, float] = {}
+        for executed_at, pl in result.all():
+            if executed_at is None or pl is None:
+                continue
+            moment = executed_at if executed_at.tzinfo else executed_at.replace(tzinfo=UTC)
+            day = moment.astimezone(UTC).date().isoformat()
+            totals[day] = round(totals.get(day, 0.0) + float(pl), 2)
+        return totals
 
     async def open_for_trade_id(self, broker_trade_id: str) -> TradeRecord | None:
         result = await self._session.execute(

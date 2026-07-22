@@ -241,6 +241,11 @@ class TradeHistoryRepository(ABC):
         ...
 
     @abstractmethod
+    async def realized_pnl_by_day(self) -> dict[str, float]:
+        """Sum of realized P/L keyed by UTC date (``YYYY-MM-DD``)."""
+        ...
+
+    @abstractmethod
     async def open_for_trade_id(self, broker_trade_id: str) -> TradeRecord | None:
         """The recorded open (entry) that owns ``broker_trade_id``, if any."""
         ...
