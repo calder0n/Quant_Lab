@@ -30,6 +30,7 @@ def _to_entity(record: TradeHistoryRecord) -> TradeRecord:
         filled=record.filled,
         detail=record.detail,
         signal_time=record.signal_time,
+        broker_trade_id=record.broker_trade_id,
         params=cast(dict[str, ParamValue], record.params or {}),
         executed_at=record.executed_at,
     )
@@ -59,6 +60,7 @@ class SqlAlchemyTradeHistoryRepository(TradeHistoryRepository):
             filled=record.filled,
             detail=record.detail,
             signal_time=record.signal_time,
+            broker_trade_id=record.broker_trade_id,
             params=dict(record.params),
         )
         self._session.add(row)
@@ -91,3 +93,20 @@ class SqlAlchemyTradeHistoryRepository(TradeHistoryRepository):
             (strategy_id, symbol, timeframe): float(total)
             for strategy_id, symbol, timeframe, total in result.all()
         }
+
+    async def open_for_trade_id(self, broker_trade_id: str) -> TradeRecord | None:
+        result = await self._session.execute(
+            select(TradeHistoryRecord)
+            .where(TradeHistoryRecord.broker_trade_id == broker_trade_id)
+            .where(TradeHistoryRecord.action.in_(("opened_long", "opened_short")))
+            .order_by(TradeHistoryRecord.executed_at.asc())
+            .limit(1)
+        )
+        row = result.scalars().first()
+        return _to_entity(row) if row is not None else None
+
+    async def exists_with_order_id(self, order_id: str) -> bool:
+        result = await self._session.execute(
+            select(TradeHistoryRecord.id).where(TradeHistoryRecord.order_id == order_id).limit(1)
+        )
+        return result.first() is not None

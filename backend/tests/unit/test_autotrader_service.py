@@ -84,6 +84,11 @@ class FakeTradingService:
         self.calls: list[dict[str, object]] = []
         self.action = action
         self.raises = raises
+        self.reconcile_calls = 0
+
+    async def reconcile_broker_closes(self) -> int:
+        self.reconcile_calls += 1
+        return 0
 
     async def execute(
         self,

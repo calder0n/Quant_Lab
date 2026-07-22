@@ -84,6 +84,9 @@ class TradingService:
         self._event_bus = event_bus
         self._trades = trades
         self._ml_artifacts_dir = ml_artifacts_dir
+        # Broker transaction cursor for reconciling server-side closes; primed to
+        # the latest transaction on first use so only closes from then on land.
+        self._txn_cursor: str | None = None
 
     async def status(self) -> TradingStatus:
         async with self._states() as repo:
@@ -136,6 +139,59 @@ class TradingService:
             return []
         async with self._trades() as repo:
             return await repo.list_recent(limit=limit, strategy_id=strategy_id)
+
+    async def reconcile_broker_closes(self) -> int:
+        """Record broker-side closes (TP/SL/trailing) into history.
+
+        Positions closed by the broker's own orders never pass through the
+        platform, so their realized P/L is missing from the history. This pulls
+        them from the broker's transaction feed and matches each back to the
+        strategy that opened it (via broker trade id). Idempotent and never
+        raises: a failure just leaves the cursor for a retry next tick.
+        """
+        if self._trades is None:
+            return 0
+        try:
+            credentials = await self._credentials()
+            if not credentials.configured or not credentials.account_id:
+                return 0
+            broker = await self._broker_factory()
+            closes, self._txn_cursor = await broker.realized_closes_since(self._txn_cursor)
+            if not closes:
+                return 0
+            recorded = 0
+            async with self._trades() as repo:
+                for close in closes:
+                    if await repo.exists_with_order_id(close.transaction_id):
+                        continue
+                    opened = await repo.open_for_trade_id(close.trade_id)
+                    if opened is None:
+                        continue  # not a platform-opened trade we can attribute
+                    await repo.add(
+                        TradeRecord(
+                            strategy_id=opened.strategy_id,
+                            symbol=opened.symbol,
+                            timeframe=opened.timeframe,
+                            action="closed",
+                            units=close.units,
+                            source=opened.source,
+                            entry_price=close.price,
+                            realized_pl=close.realized_pl,
+                            order_id=close.transaction_id,
+                            filled=True,
+                            detail=close.reason.lower(),
+                            signal_time=opened.signal_time,
+                            broker_trade_id=close.trade_id,
+                            params=opened.params,
+                        )
+                    )
+                    recorded += 1
+            if recorded:
+                logger.info("Reconciled %d broker-side close(s) into trade history", recorded)
+            return recorded
+        except Exception:
+            logger.exception("Broker close reconciliation failed")
+            return 0
 
     async def execute(
         self,
@@ -220,6 +276,7 @@ class TradingService:
                     filled=order.filled,
                     detail=order.detail,
                     signal_time=signal_time,
+                    broker_trade_id=order.trade_id,
                     params=dict(strategy.params),
                 )
             )

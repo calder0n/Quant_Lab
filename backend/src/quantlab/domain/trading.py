@@ -43,6 +43,26 @@ class OrderResult:
     detail: str = ""
     price: float | None = None  # broker fill price, when the order filled
     realized_pl: float | None = None  # realized P/L reported by the broker (closes)
+    trade_id: str | None = None  # broker trade id opened by this order (for reconciliation)
+
+
+@dataclass(frozen=True)
+class BrokerClose:
+    """A position the broker closed on its own (take-profit / stop / trailing).
+
+    These fills happen server-side and never pass through the platform's close
+    path, so they're pulled from the broker's transaction feed and reconciled
+    into the history via ``trade_id`` (matching the open the platform recorded).
+    """
+
+    trade_id: str  # the broker trade id that was closed
+    transaction_id: str  # the closing fill's id (dedup key)
+    instrument: str
+    units: float
+    price: float | None
+    realized_pl: float
+    reason: str  # TAKE_PROFIT_ORDER | STOP_LOSS_ORDER | TRAILING_STOP_LOSS_ORDER
+    time: str
 
 
 @dataclass
@@ -69,6 +89,9 @@ class TradeRecord:
     filled: bool = False
     detail: str | None = None
     signal_time: str | None = None
+    # Broker trade id of the position opened here — lets a later broker-side
+    # close (TP/SL/trailing) be matched back to this strategy.
+    broker_trade_id: str | None = None
     params: dict[str, float | int | bool | str] = field(default_factory=dict)
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     executed_at: datetime | None = None

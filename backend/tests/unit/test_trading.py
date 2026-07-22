@@ -23,6 +23,7 @@ from quantlab.domain.events import DomainEvent
 from quantlab.domain.market import Symbol, Timeframe
 from quantlab.domain.trading import (
     AccountSummary,
+    BrokerClose,
     LiveConfirmationError,
     OrderExecuted,
     OrderResult,
@@ -83,6 +84,11 @@ class FakeBroker(ExecutionBroker):
     async def close_position(self, symbol: Symbol) -> OrderResult:
         self.closed.append(symbol)
         return OrderResult(instrument=EUR_USD, units=0.0, filled=True, order_id="43")
+
+    async def realized_closes_since(
+        self, cursor: str | None
+    ) -> tuple[list[BrokerClose], str]:
+        return [], cursor or "0"
 
 
 class SignalProvider(MarketDataProvider):
@@ -255,6 +261,72 @@ async def test_execute_without_signal_does_nothing() -> None:
         assert not any(isinstance(e, OrderExecuted) for e in events)
 
 
+async def test_reconcile_records_broker_side_closes_once() -> None:
+    """A TP/SL close from the broker is matched to its strategy and recorded once."""
+    from quantlab.domain.trading import TradeRecord
+    from quantlab.infrastructure.db.repositories.trade_history import (
+        SqlAlchemyTradeHistoryRepository,
+    )
+
+    engine = create_async_engine("sqlite+aiosqlite://")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    @asynccontextmanager
+    async def trades() -> AsyncIterator[SqlAlchemyTradeHistoryRepository]:
+        async with factory() as session, session.begin():
+            yield SqlAlchemyTradeHistoryRepository(session)
+
+    # An open the platform recorded, tagged with its broker trade id.
+    async with trades() as repo:
+        await repo.add(
+            TradeRecord(
+                strategy_id="ema_cross",
+                symbol=Symbol.XAUUSD,
+                timeframe="M30",
+                action="opened_long",
+                units=1,
+                source="autotrader",
+                broker_trade_id="T99",
+            )
+        )
+
+    class ReconBroker(FakeBroker):
+        async def realized_closes_since(
+            self, cursor: str | None
+        ) -> tuple[list[BrokerClose], str]:
+            if cursor is None:
+                return [], "100"  # prime only
+            return [
+                BrokerClose(
+                    trade_id="T99",
+                    transaction_id="TX1",
+                    instrument="XAU_USD",
+                    units=-1,
+                    price=4100.0,
+                    realized_pl=12.5,
+                    reason="TAKE_PROFIT_ORDER",
+                    time="t",
+                )
+            ], "101"
+
+    service, _, _ = build_service(ReconBroker(), SignalProvider(make_market_data(100)))
+    service._trades = trades  # type: ignore[assignment]
+
+    assert await service.reconcile_broker_closes() == 0  # first call primes the cursor
+    assert await service.reconcile_broker_closes() == 1  # records the TP close
+    assert await service.reconcile_broker_closes() == 0  # idempotent: already recorded
+
+    async with trades() as repo:
+        closed = [r for r in await repo.list_recent() if r.action == "closed"]
+    assert len(closed) == 1
+    assert closed[0].strategy_id == "ema_cross"  # attributed via broker trade id
+    assert closed[0].realized_pl == 12.5
+    assert closed[0].detail == "take_profit_order"
+    await engine.dispose()
+
+
 # -- SQL trading state ---------------------------------------------------------------
 
 
@@ -384,6 +456,65 @@ async def test_oanda_execution_close_position() -> None:
     broker = OandaExecutionBroker(oanda_http(handler), "001-1")
     result = await broker.close_position(Symbol.EURUSD)
     assert result.filled and result.units == 500
+
+
+async def test_oanda_realized_closes_parses_broker_fills() -> None:
+    """Only TP/SL/trailing fills become closes; our own market orders are ignored."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "lastTransactionID": "205",
+                "transactions": [
+                    {
+                        "type": "ORDER_FILL",
+                        "id": "201",
+                        "reason": "TAKE_PROFIT_ORDER",
+                        "instrument": "XAU_USD",
+                        "price": "4100.0",
+                        "time": "t1",
+                        "tradesClosed": [
+                            {"tradeID": "T99", "units": "-1", "realizedPL": "12.5"}
+                        ],
+                    },
+                    {  # our own open — has no close reason, must be ignored
+                        "type": "ORDER_FILL",
+                        "id": "202",
+                        "reason": "MARKET_ORDER",
+                        "instrument": "XAU_USD",
+                        "tradeOpened": {"tradeID": "T100"},
+                    },
+                    {
+                        "type": "ORDER_FILL",
+                        "id": "203",
+                        "reason": "STOP_LOSS_ORDER",
+                        "instrument": "EUR_USD",
+                        "price": "1.1",
+                        "time": "t2",
+                        "tradesClosed": [
+                            {"tradeID": "T50", "units": "1000", "realizedPL": "-8.0"}
+                        ],
+                    },
+                ],
+            },
+        )
+
+    broker = OandaExecutionBroker(oanda_http(handler), "001-1")
+    closes, cursor = await broker.realized_closes_since("200")
+    assert cursor == "205"
+    assert {c.reason for c in closes} == {"TAKE_PROFIT_ORDER", "STOP_LOSS_ORDER"}
+    tp = next(c for c in closes if c.reason == "TAKE_PROFIT_ORDER")
+    assert tp.trade_id == "T99" and tp.realized_pl == 12.5 and tp.transaction_id == "201"
+
+
+async def test_oanda_realized_closes_primes_cursor_when_none() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"account": {"lastTransactionID": "300"}})
+
+    broker = OandaExecutionBroker(oanda_http(handler), "001-1")
+    closes, cursor = await broker.realized_closes_since(None)
+    assert closes == [] and cursor == "300"
 
 
 async def test_oanda_close_without_position_is_a_noop() -> None:
