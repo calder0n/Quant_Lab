@@ -6,6 +6,7 @@ the typed confirmation ``TRADE-LIVE``. The platform never enables itself.
 """
 
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
@@ -43,6 +44,17 @@ TradingStateRepositoryFactory = Callable[[], AbstractAsyncContextManager[Trading
 TradeHistoryRepositoryFactory = Callable[[], AbstractAsyncContextManager[TradeHistoryRepository]]
 
 SIGNAL_LOOKBACK_BARS = 400
+
+
+def _parse_broker_time(value: str) -> datetime | None:
+    """Parse an OANDA RFC3339 timestamp (may carry nanoseconds and a trailing Z)."""
+    if not value:
+        return None
+    text = re.sub(r"(\.\d{6})\d+", r"\1", value.replace("Z", "+00:00"))
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 @dataclass(frozen=True)
@@ -84,6 +96,9 @@ class TradingService:
         self._event_bus = event_bus
         self._trades = trades
         self._ml_artifacts_dir = ml_artifacts_dir
+        # Broker transaction cursor for reconciling server-side closes; primed to
+        # the latest transaction on first use so only closes from then on land.
+        self._txn_cursor: str | None = None
 
     async def status(self) -> TradingStatus:
         async with self._states() as repo:
@@ -128,14 +143,73 @@ class TradingService:
         )
         return state
 
-    async def history(
-        self, limit: int = 100, strategy_id: str | None = None
-    ) -> list[TradeRecord]:
+    async def history(self, limit: int = 100, strategy_id: str | None = None) -> list[TradeRecord]:
         """Recent executed orders, newest first."""
         if self._trades is None:
             return []
         async with self._trades() as repo:
             return await repo.list_recent(limit=limit, strategy_id=strategy_id)
+
+    async def pnl_by_day(self) -> dict[str, float]:
+        """Realized P/L summed per UTC day, for the calendar view."""
+        if self._trades is None:
+            return {}
+        async with self._trades() as repo:
+            return await repo.realized_pnl_by_day()
+
+    async def reconcile_broker_closes(self) -> int:
+        """Record broker-side closes (TP/SL/trailing) into history.
+
+        Positions closed by the broker's own orders never pass through the
+        platform, so their realized P/L is missing from the history. This pulls
+        them from the broker's transaction feed and matches each back to the
+        strategy that opened it (via broker trade id). Idempotent and never
+        raises: a failure just leaves the cursor for a retry next tick.
+        """
+        if self._trades is None:
+            return 0
+        try:
+            credentials = await self._credentials()
+            if not credentials.configured or not credentials.account_id:
+                return 0
+            broker = await self._broker_factory()
+            closes, self._txn_cursor = await broker.realized_closes_since(self._txn_cursor)
+            if not closes:
+                return 0
+            recorded = 0
+            async with self._trades() as repo:
+                for close in closes:
+                    if await repo.exists_with_order_id(close.transaction_id):
+                        continue
+                    opened = await repo.open_for_trade_id(close.trade_id)
+                    if opened is None:
+                        continue  # not a platform-opened trade we can attribute
+                    await repo.add(
+                        TradeRecord(
+                            strategy_id=opened.strategy_id,
+                            symbol=opened.symbol,
+                            timeframe=opened.timeframe,
+                            action="closed",
+                            units=close.units,
+                            source=opened.source,
+                            exit_price=close.price,
+                            realized_pl=close.realized_pl,
+                            order_id=close.transaction_id,
+                            filled=True,
+                            detail=close.reason.lower(),
+                            signal_time=opened.signal_time,
+                            broker_trade_id=close.trade_id,
+                            params=opened.params,
+                            executed_at=_parse_broker_time(close.time),
+                        )
+                    )
+                    recorded += 1
+            if recorded:
+                logger.info("Reconciled %d broker-side close(s) into trade history", recorded)
+            return recorded
+        except Exception:
+            logger.exception("Broker close reconciliation failed")
+            return 0
 
     async def execute(
         self,
@@ -211,7 +285,16 @@ class TradingService:
                     action=entry_action,
                     units=order.units,
                     source=source,
-                    entry_price=order.price if order.price is not None else close,
+                    entry_price=(
+                        (order.price if order.price is not None else close)
+                        if entry_action != "closed"
+                        else None
+                    ),
+                    exit_price=(
+                        (order.price if order.price is not None else close)
+                        if entry_action == "closed"
+                        else None
+                    ),
                     sl_price=sl,
                     tp_price=tp,
                     trailing_distance=trailing_distance if entry_action != "closed" else None,
@@ -220,6 +303,7 @@ class TradingService:
                     filled=order.filled,
                     detail=order.detail,
                     signal_time=signal_time,
+                    broker_trade_id=order.trade_id,
                     params=dict(strategy.params),
                 )
             )
@@ -232,7 +316,10 @@ class TradingService:
             sl = None if trailing else (close * (1 - sl_pct) if sl_pct else None)
             tp = close * (1 + tp_pct) if tp_pct else None
             opened = await broker.place_market_order(
-                symbol, abs(units), stop_loss=sl, take_profit=tp,
+                symbol,
+                abs(units),
+                stop_loss=sl,
+                take_profit=tp,
                 trailing_distance=trailing_distance,
             )
             orders.append(opened)
@@ -246,7 +333,10 @@ class TradingService:
             sl = None if trailing else (close * (1 + sl_pct) if sl_pct else None)
             tp = close * (1 - tp_pct) if tp_pct else None
             opened = await broker.place_market_order(
-                symbol, -abs(units), stop_loss=sl, take_profit=tp,
+                symbol,
+                -abs(units),
+                stop_loss=sl,
+                take_profit=tp,
                 trailing_distance=trailing_distance,
             )
             orders.append(opened)

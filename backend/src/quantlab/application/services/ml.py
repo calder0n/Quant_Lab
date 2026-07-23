@@ -7,6 +7,7 @@ environment, evaluated deterministically on the held-out tail.
 """
 
 import asyncio
+import json
 import logging
 import uuid
 from collections.abc import Callable
@@ -111,10 +112,22 @@ class MlService:
         return data
 
     @staticmethod
-    def _chronological_split(n: int) -> tuple[slice, slice, slice]:
+    def _chronological_split(n: int, embargo: int = 0) -> tuple[slice, slice, slice]:
+        """Chronological split with gaps around label boundaries.
+
+        A label at t observes up to ``horizon`` future bars.  Removing that
+        many observations at each boundary prevents train/validation/test rows
+        from sharing future price information.
+        """
         train_end = int(n * 0.7)
         valid_end = int(n * 0.85)
-        return slice(0, train_end), slice(train_end, valid_end), slice(valid_end, n)
+        if embargo < 0 or train_end <= embargo or valid_end - train_end <= 2 * embargo:
+            raise MlTrainingError("Not enough rows for the requested embargo.")
+        return (
+            slice(0, train_end - embargo),
+            slice(train_end + embargo, valid_end - embargo),
+            slice(valid_end + embargo, n),
+        )
 
     def _train_supervised(self, model: MlModel) -> tuple[dict[str, Any], Path]:
         from quantlab.infrastructure.ml.trainers import TRAINERS
@@ -124,6 +137,9 @@ class MlService:
         data = self._prepare(model)
         config = model.config
         horizon = int(config.get("horizon", 12))
+        direction = str(config.get("direction", "long"))
+        if direction not in ("long", "short"):
+            raise MlTrainingError("config.direction must be 'long' or 'short'.")
         labels = triple_barrier_labels(
             data,
             horizon=horizon,
@@ -131,14 +147,17 @@ class MlService:
             tp_atr=float(config.get("tp_atr", 3.0)),
         )
         features = build_features(data)
-        y_all = target_vector(labels, model.target)
+        y_all = target_vector(labels, model.target, direction=direction)
         mask = labels["valid"] & ~features.isna().any(axis=1) & ~y_all.isna()
         x = features.loc[mask, feature_names()].to_numpy(dtype=np.float64)
         y = y_all[mask].to_numpy(dtype=np.float64)
         if len(x) < MIN_ROWS:
             raise MlTrainingError(f"Only {len(x)} labeled rows after cleaning.")
 
-        train, valid, test = self._chronological_split(len(x))
+        embargo = int(config.get("embargo_bars", horizon))
+        train, valid, test = self._chronological_split(len(x), embargo=embargo)
+        if test.stop - test.start < 20:
+            raise MlTrainingError("Too few untouched test rows after applying the embargo.")
         task: Literal["classification", "regression"] = (
             "classification" if model.target in CLASSIFICATION_TARGETS else "regression"
         )
@@ -151,13 +170,22 @@ class MlService:
             {
                 "task": task,
                 "horizon": horizon,
+                "direction": direction,
+                "embargo_bars": embargo,
                 "rows_train": int(train.stop),
+                "rows_valid": int(valid.stop - valid.start),
                 "rows_test": int(test.stop - test.start),
                 "feature_importances": trained.importances,
             }
         )
         artifact = self._artifact_path(model, "joblib" if model.algorithm != "torch_mlp" else "pt")
         trained.save(artifact)
+        # Inference must know which side the model was trained to score; an
+        # artifact without this information could accidentally gate shorts with
+        # a long-outcome probability.
+        artifact.with_suffix(artifact.suffix + ".meta.json").write_text(
+            json.dumps({"direction": direction, "target": model.target}), encoding="utf-8"
+        )
         return metrics, artifact
 
     @staticmethod
@@ -175,6 +203,8 @@ class MlService:
                 "auc": auc,
                 "accuracy": float(sk.accuracy_score(y_true, y_pred >= 0.5)),
                 "base_rate": base_rate,
+                "brier": float(sk.brier_score_loss(y_true, y_pred)),
+                "log_loss": float(sk.log_loss(y_true, y_pred, labels=[0.0, 1.0])),
             }
         return {
             "mae": float(sk.mean_absolute_error(y_true, y_pred)),

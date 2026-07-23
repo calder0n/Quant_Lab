@@ -150,6 +150,27 @@ def test_ml_filter_gates_entries_on_predicted_win_probability() -> None:
     assert no_model["long_entry"].sum() == baseline
 
 
+def test_directional_ml_filter_never_uses_long_probability_for_short_entries() -> None:
+    data = make_market_data(200)
+    data.attrs["ml_predictor"] = lambda d: pd.DataFrame({"long": 0.9, "short": 0.1}, index=d.index)
+    signals = DummyStrategy(use_ml_filter=True, ml_threshold=0.5).generate_signals(data)
+    assert signals["long_entry"].sum() > 0
+    assert signals["short_entry"].sum() == 0
+
+
+def test_regime_filter_can_remove_choppy_entries() -> None:
+    data = make_market_data(300)
+    unconstrained = DummyStrategy().generate_signals(data)["long_entry"].sum()
+    strict = (
+        DummyStrategy(
+            use_regime_filter=True, regime="trend", regime_period=20, min_regime_efficiency=0.95
+        )
+        .generate_signals(data)["long_entry"]
+        .sum()
+    )
+    assert strict <= unconstrained
+
+
 def test_default_fitness_behaviour() -> None:
     strategy = DummyStrategy()
     assert strategy.fitness(BacktestMetrics(trades=0)) == -1.0

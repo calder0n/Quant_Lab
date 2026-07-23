@@ -23,6 +23,7 @@ from quantlab.domain.ml import MlModel
 from quantlab.domain.optimization import OptimizationStudy, OptimizationTrial
 from quantlab.domain.trading import (
     AccountSummary,
+    BrokerClose,
     OrderResult,
     Position,
     TradeRecord,
@@ -232,6 +233,28 @@ class TradeHistoryRepository(ABC):
         self, limit: int = 100, strategy_id: str | None = None
     ) -> list[TradeRecord]: ...
 
+    @abstractmethod
+    async def realized_pnl_by_assignment(
+        self, source: str | None = None
+    ) -> dict[tuple[str, str, str], float]:
+        """Sum of realized P/L keyed by (strategy_id, symbol, timeframe)."""
+        ...
+
+    @abstractmethod
+    async def realized_pnl_by_day(self) -> dict[str, float]:
+        """Sum of realized P/L keyed by UTC date (``YYYY-MM-DD``)."""
+        ...
+
+    @abstractmethod
+    async def open_for_trade_id(self, broker_trade_id: str) -> TradeRecord | None:
+        """The recorded open (entry) that owns ``broker_trade_id``, if any."""
+        ...
+
+    @abstractmethod
+    async def exists_with_order_id(self, order_id: str) -> bool:
+        """Whether a row with this broker ``order_id`` is already recorded (dedup)."""
+        ...
+
 
 class AutoTraderRepository(ABC):
     """Persistence port for automated-trading assignments."""
@@ -283,6 +306,17 @@ class ExecutionBroker(ABC):
 
     @abstractmethod
     async def close_position(self, symbol: Symbol) -> OrderResult: ...
+
+    @abstractmethod
+    async def realized_closes_since(
+        self, cursor: str | None
+    ) -> tuple[list[BrokerClose], str]:
+        """Broker-side closes (TP/SL/trailing) after ``cursor``, and the new cursor.
+
+        ``cursor=None`` primes the cursor to the latest transaction and returns no
+        closes, so reconciliation starts from now rather than backfilling history.
+        """
+        ...
 
 
 class BrokerSettingsRepository(ABC):

@@ -21,6 +21,7 @@ class TradeHistoryRecord(Base):
     source: Mapped[str] = mapped_column(String(16), default="manual")
     units: Mapped[float] = mapped_column(Float)
     entry_price: Mapped[float | None] = mapped_column(Float)
+    exit_price: Mapped[float | None] = mapped_column(Float)
     sl_price: Mapped[float | None] = mapped_column(Float)
     tp_price: Mapped[float | None] = mapped_column(Float)
     trailing_distance: Mapped[float | None] = mapped_column(Float)
@@ -29,6 +30,7 @@ class TradeHistoryRecord(Base):
     filled: Mapped[bool] = mapped_column(Boolean, default=False)
     detail: Mapped[str | None] = mapped_column(String)
     signal_time: Mapped[str | None] = mapped_column(String(40))
+    broker_trade_id: Mapped[str | None] = mapped_column(String(32), index=True)
     params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True

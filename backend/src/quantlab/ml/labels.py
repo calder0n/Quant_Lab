@@ -1,8 +1,8 @@
 """Triple-barrier labeling.
 
-For every bar we simulate a hypothetical *long* entry at the close with a
-stop at ``sl_atr``·ATR below and a target at ``tp_atr``·ATR above, watched for
-``horizon`` bars. The label records which barrier is touched first:
+For every bar we simulate hypothetical long *and* short entries at the close,
+with ATR-scaled barriers watched for ``horizon`` bars.  Keeping both directions
+prevents a long-outcome model from being applied to short signals.
 
 - ``first_touch``: +1 take-profit first, -1 stop-loss first, 0 neither.
   If both are touched within the same bar the stop wins (conservative).
@@ -30,8 +30,10 @@ def triple_barrier_labels(
     atr = ta.atr(data, 14).to_numpy(dtype=float)
     n = len(data)
 
-    tp_level = close + tp_atr * atr
-    sl_level = close - sl_atr * atr
+    long_tp_level = close + tp_atr * atr
+    long_sl_level = close - sl_atr * atr
+    short_tp_level = close - tp_atr * atr
+    short_sl_level = close + sl_atr * atr
 
     infinity = np.iinfo(np.int64).max
     tp_time = np.full(n, infinity, dtype=np.int64)
@@ -42,8 +44,8 @@ def triple_barrier_labels(
         future_low = np.full(n, np.inf)
         future_high[: n - offset] = high[offset:]
         future_low[: n - offset] = low[offset:]
-        tp_hit_now = (future_high >= tp_level) & (tp_time == infinity)
-        sl_hit_now = (future_low <= sl_level) & (sl_time == infinity)
+        tp_hit_now = (future_high >= long_tp_level) & (tp_time == infinity)
+        sl_hit_now = (future_low <= long_sl_level) & (sl_time == infinity)
         tp_time[tp_hit_now] = offset
         sl_time[sl_hit_now] = offset
 
@@ -51,6 +53,22 @@ def triple_barrier_labels(
     first_touch[tp_time < sl_time] = 1
     first_touch[sl_time <= tp_time] = -1
     first_touch[(tp_time == infinity) & (sl_time == infinity)] = 0
+
+    short_tp_time = np.full(n, infinity, dtype=np.int64)
+    short_sl_time = np.full(n, infinity, dtype=np.int64)
+    for offset in range(1, horizon + 1):
+        future_high = np.full(n, -np.inf)
+        future_low = np.full(n, np.inf)
+        future_high[: n - offset] = high[offset:]
+        future_low[: n - offset] = low[offset:]
+        tp_hit_now = (future_low <= short_tp_level) & (short_tp_time == infinity)
+        sl_hit_now = (future_high >= short_sl_level) & (short_sl_time == infinity)
+        short_tp_time[tp_hit_now] = offset
+        short_sl_time[sl_hit_now] = offset
+    short_first_touch = np.zeros(n, dtype=np.int64)
+    short_first_touch[short_tp_time < short_sl_time] = 1
+    short_first_touch[short_sl_time <= short_tp_time] = -1
+    short_first_touch[(short_tp_time == infinity) & (short_sl_time == infinity)] = 0
 
     forward_return = np.full(n, np.nan)
     forward_return[: n - horizon] = close[horizon:] / close[: n - horizon] - 1.0
@@ -64,6 +82,8 @@ def triple_barrier_labels(
         {
             "first_touch": first_touch,
             "tp_touched": tp_time < infinity,
+            "short_first_touch": short_first_touch,
+            "short_tp_touched": short_tp_time < infinity,
             "forward_return": forward_return,
             "valid": valid,
         },
@@ -71,16 +91,21 @@ def triple_barrier_labels(
     )
 
 
-def target_vector(labels: pd.DataFrame, target: str) -> pd.Series:
+def target_vector(labels: pd.DataFrame, target: str, direction: str = "long") -> pd.Series:
     """Extract one model target from the label frame."""
+    if direction not in ("long", "short"):
+        raise ValueError("direction must be 'long' or 'short'")
+    touch = "first_touch" if direction == "long" else "short_first_touch"
+    tp_touch = "tp_touched" if direction == "long" else "short_tp_touched"
     if target == "win":
-        return (labels["first_touch"] == 1).astype(float)
+        return (labels[touch] == 1).astype(float)
     if target == "sl_hit":
-        return (labels["first_touch"] == -1).astype(float)
+        return (labels[touch] == -1).astype(float)
     if target == "tp_hit":
-        return labels["tp_touched"].astype(float)
+        return labels[tp_touch].astype(float)
     if target == "expected_move":
-        return labels["forward_return"].astype(float)
+        returns = labels["forward_return"].astype(float)
+        return returns if direction == "long" else -returns
     raise ValueError(f"Unknown target: {target}")
 
 

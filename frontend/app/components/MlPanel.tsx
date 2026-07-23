@@ -13,6 +13,7 @@ type MlModel = {
   algorithm: string;
   symbol: string;
   timeframe: string;
+  config: Record<string, unknown>;
   status: "pending" | "running" | "completed" | "failed";
   metrics: Record<string, unknown> | null;
   message: string | null;
@@ -89,6 +90,7 @@ export default function MlPanel() {
   const [kind, setKind] = useState<"ml" | "rl">("ml");
   const [target, setTarget] = useState("win");
   const [algorithm, setAlgorithm] = useState("xgboost");
+  const [direction, setDirection] = useState<"long" | "short">("long");
   const [dataset, setDataset] = useState("");
   // Triple-barrier labeling config (what "a winning trade" means for the model).
   const [horizon, setHorizon] = useState(12);
@@ -140,7 +142,7 @@ export default function MlPanel() {
           algorithm: kind === "ml" ? algorithm : "ppo",
           symbol,
           timeframe,
-          config: kind === "ml" ? { horizon, sl_atr: slAtr, tp_atr: tpAtr } : {},
+          config: kind === "ml" ? { horizon, sl_atr: slAtr, tp_atr: tpAtr, direction } : {},
         }),
       });
       const body = await response.json();
@@ -206,6 +208,20 @@ export default function MlPanel() {
                       {a}
                     </option>
                   ))}
+                </select>
+              </label>
+              <label
+                className="flex flex-col gap-1 text-xs text-slate-400"
+                title="El modelo aprende el resultado de una entrada de un único lado. Para filtrar ambos lados, entrena un modelo long y otro short."
+              >
+                Dirección
+                <select
+                  className={selectClass}
+                  value={direction}
+                  onChange={(e) => setDirection(e.target.value as "long" | "short")}
+                >
+                  <option value="long">Long</option>
+                  <option value="short">Short</option>
                 </select>
               </label>
               <label

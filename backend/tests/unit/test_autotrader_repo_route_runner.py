@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import httpx
 import pytest
@@ -98,6 +99,13 @@ class FakeAutoTraderService:
         return self.store.pop(auto_trader_id, None) is not None
 
 
+class _FakePnlRepo:
+    async def realized_pnl_by_assignment(
+        self, source: str | None = None
+    ) -> dict[tuple[str, str, str], float]:
+        return {}
+
+
 class AutoTraderStubContainer:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -108,6 +116,10 @@ class AutoTraderStubContainer:
                 return object()
 
         self.candle_store = _Store()
+
+    @asynccontextmanager
+    async def trade_history_repository(self) -> AsyncIterator[_FakePnlRepo]:
+        yield _FakePnlRepo()
 
 
 def client(app: FastAPI, container: AutoTraderStubContainer) -> httpx.AsyncClient:

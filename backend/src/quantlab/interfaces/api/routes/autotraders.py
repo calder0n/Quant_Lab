@@ -41,6 +41,7 @@ class AutoTraderOut(BaseModel):
     units: float
     params: dict[str, ParamValue]
     ml_model_id: str | None
+    realized_pl: float
     enabled: bool
     last_run: datetime | None
     last_signal_time: str | None
@@ -50,7 +51,7 @@ class AutoTraderOut(BaseModel):
     updated_at: datetime | None
 
     @classmethod
-    def from_entity(cls, at: AutoTrader) -> "AutoTraderOut":
+    def from_entity(cls, at: AutoTrader, realized_pl: float = 0.0) -> "AutoTraderOut":
         return cls(
             id=at.id,
             strategy_id=at.strategy_id,
@@ -59,6 +60,7 @@ class AutoTraderOut(BaseModel):
             units=at.units,
             params=at.params,
             ml_model_id=at.ml_model_id,
+            realized_pl=realized_pl,
             enabled=at.enabled,
             last_run=at.last_run,
             last_signal_time=at.last_signal_time,
@@ -71,8 +73,16 @@ class AutoTraderOut(BaseModel):
 
 @router.get("", response_model=list[AutoTraderOut])
 async def list_autotraders(_: CurrentUser, container: ContainerDep) -> list[AutoTraderOut]:
-    """Every auto-trading assignment, newest first."""
-    return [AutoTraderOut.from_entity(at) for at in await container.auto_trader_service.list_all()]
+    """Every auto-trading assignment, newest first, with its realized P/L."""
+    autotraders = await container.auto_trader_service.list_all()
+    async with container.trade_history_repository() as repo:
+        pnl = await repo.realized_pnl_by_assignment(source="autotrader")
+    return [
+        AutoTraderOut.from_entity(
+            at, pnl.get((at.strategy_id, at.symbol.value, at.timeframe.value), 0.0)
+        )
+        for at in autotraders
+    ]
 
 
 @router.post("", response_model=AutoTraderOut, status_code=status.HTTP_201_CREATED)

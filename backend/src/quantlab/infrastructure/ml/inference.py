@@ -6,6 +6,7 @@ Used by the shared ML entry filter (``use_ml_filter``) to gate strategy entries
 on model confidence, the same way the other entry filters gate on price rules.
 """
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,7 +15,7 @@ import pandas as pd
 
 from quantlab.ml.features import build_features, feature_names
 
-WinPredictor = Callable[[pd.DataFrame], pd.Series]
+WinPredictor = Callable[[pd.DataFrame], pd.DataFrame]
 
 
 class ModelNotUsableError(ValueError):
@@ -43,14 +44,22 @@ def load_win_predictor(artifacts_dir: Path, model_id: str) -> WinPredictor:
         )
 
     names = feature_names()
+    meta_path = path.with_suffix(path.suffix + ".meta.json")
+    direction = "long"  # legacy artifacts were trained with the old long label.
+    if meta_path.exists():
+        direction = str(
+            json.loads(meta_path.read_text(encoding="utf-8")).get("direction", direction)
+        )
+    if direction not in ("long", "short"):
+        raise ModelNotUsableError("Model metadata has an invalid trade direction.")
 
-    def predict(data: pd.DataFrame) -> pd.Series:
+    def predict(data: pd.DataFrame) -> pd.DataFrame:
         features = build_features(data)
         usable = ~features[names].isna().any(axis=1)
-        proba = pd.Series(np.nan, index=data.index)
+        proba = pd.DataFrame(np.nan, index=data.index, columns=["long", "short"])
         if usable.any():
             x = features.loc[usable, names].to_numpy(dtype=np.float64)
-            proba.loc[usable] = model.predict_proba(x)[:, 1]
+            proba.loc[usable, direction] = model.predict_proba(x)[:, 1]
         return proba
 
     return predict

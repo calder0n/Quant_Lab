@@ -108,6 +108,10 @@ class AutoTraderService:
         Never raises: per-assignment failures are recorded on the row so the
         dashboard can surface them while the loop keeps running.
         """
+        # Fold in any positions the broker closed on its own (TP/SL/trailing)
+        # since the last tick, so the history and per-strategy P&L stay complete.
+        await self._trading.reconcile_broker_closes()
+
         async with self._states() as state_repo:
             globally_enabled = (await state_repo.get()).enabled
         async with self._repositories() as repo:

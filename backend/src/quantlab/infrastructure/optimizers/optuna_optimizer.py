@@ -35,7 +35,11 @@ class OptunaOptimizer(Optimizer):
         seed: int | None = None,
     ) -> OptimizationOutcome:
         study = optuna.create_study(
-            direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed)
+            direction="maximize",
+            # Parameters such as fast/slow EMA, SL/TP and enabled filters are
+            # correlated.  Multivariate TPE models those dependencies instead
+            # of exploring each dimension in isolation.
+            sampler=optuna.samplers.TPESampler(seed=seed, multivariate=True, group=True),
         )
 
         def objective(trial: optuna.Trial) -> float:

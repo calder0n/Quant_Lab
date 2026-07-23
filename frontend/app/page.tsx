@@ -9,6 +9,7 @@ import DatasetsPanel from "./components/DatasetsPanel";
 import LoginGate from "./components/LoginGate";
 import LogsPanel from "./components/LogsPanel";
 import MlPanel from "./components/MlPanel";
+import PnlCalendar from "./components/PnlCalendar";
 import OptimizationsPanel from "./components/OptimizationsPanel";
 import ResultsPanel from "./components/ResultsPanel";
 import StrategiesPanel from "./components/StrategiesPanel";
@@ -293,6 +294,7 @@ export default function Home() {
           <>
             <TradingPanel />
             <AutoTradersPanel />
+            <PnlCalendar />
             <TradeHistoryPanel />
           </>
         )}
