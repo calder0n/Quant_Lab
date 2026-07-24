@@ -64,6 +64,7 @@ class AutoTraderService:
         units: float,
         params: dict[str, ParamValue] | None = None,
         ml_model_id: str | None = None,
+        invert: bool = False,
     ) -> AutoTrader:
         """Register an assignment; validates the strategy and its parameters."""
         self._registry.create(strategy_id, params)  # raises on unknown id / bad params
@@ -74,6 +75,7 @@ class AutoTraderService:
             units=units,
             params=dict(params or {}),
             ml_model_id=ml_model_id,
+            invert=invert,
         )
         async with self._repositories() as repo:
             return await repo.create(auto_trader)
@@ -91,6 +93,15 @@ class AutoTraderService:
             if enabled:
                 auto_trader.message = None
                 auto_trader.last_signal_time = None  # act on the current bar right away
+            return await repo.update(auto_trader)
+
+    async def set_invert(self, auto_trader_id: uuid.UUID, invert: bool) -> AutoTrader | None:
+        """Flip whether this assignment trades the opposite side of every signal."""
+        async with self._repositories() as repo:
+            auto_trader = await repo.get(auto_trader_id)
+            if auto_trader is None:
+                return None
+            auto_trader.invert = invert
             return await repo.update(auto_trader)
 
     async def delete(self, auto_trader_id: uuid.UUID) -> bool:
@@ -163,6 +174,7 @@ class AutoTraderService:
                 data=data,
                 source="autotrader",
                 ml_model_id=auto_trader.ml_model_id,
+                invert=auto_trader.invert,
             )
             auto_trader.last_run = now
             auto_trader.last_signal_time = report.signal_time

@@ -23,6 +23,7 @@ def _to_entity(record: AutoTraderRecord) -> AutoTrader:
         units=record.units,
         params=cast(dict[str, ParamValue], record.params or {}),
         ml_model_id=record.ml_model_id,
+        invert=record.invert,
         enabled=record.enabled,
         last_bucket=record.last_bucket,
         last_run=record.last_run,
@@ -41,6 +42,7 @@ def _apply(record: AutoTraderRecord, at: AutoTrader) -> None:
     record.units = at.units
     record.params = at.params
     record.ml_model_id = at.ml_model_id
+    record.invert = at.invert
     record.enabled = at.enabled
     record.last_bucket = at.last_bucket
     record.last_run = at.last_run

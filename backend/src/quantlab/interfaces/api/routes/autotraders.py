@@ -27,10 +27,15 @@ class AutoTraderCreate(BaseModel):
     units: float = Field(gt=0, le=1_000_000)
     params: dict[str, ParamValue] = Field(default_factory=dict)
     ml_model_id: str | None = None
+    invert: bool = False
 
 
 class ToggleIn(BaseModel):
     enabled: bool
+
+
+class InvertIn(BaseModel):
+    invert: bool
 
 
 class AutoTraderOut(BaseModel):
@@ -41,6 +46,7 @@ class AutoTraderOut(BaseModel):
     units: float
     params: dict[str, ParamValue]
     ml_model_id: str | None
+    invert: bool
     realized_pl: float
     enabled: bool
     last_run: datetime | None
@@ -60,6 +66,7 @@ class AutoTraderOut(BaseModel):
             units=at.units,
             params=at.params,
             ml_model_id=at.ml_model_id,
+            invert=at.invert,
             realized_pl=realized_pl,
             enabled=at.enabled,
             last_run=at.last_run,
@@ -101,6 +108,7 @@ async def create_autotrader(
             units=body.units,
             params=body.params,
             ml_model_id=body.ml_model_id,
+            invert=body.invert,
         )
     except UnknownStrategyError as exc:
         raise HTTPException(
@@ -117,6 +125,17 @@ async def toggle_autotrader(
 ) -> AutoTraderOut:
     """Enable or disable one assignment (global kill switch still applies)."""
     at = await container.auto_trader_service.set_enabled(auto_trader_id, body.enabled)
+    if at is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Auto-trader not found")
+    return AutoTraderOut.from_entity(at)
+
+
+@router.post("/{auto_trader_id}/invert", response_model=AutoTraderOut)
+async def invert_autotrader(
+    auto_trader_id: uuid.UUID, body: InvertIn, _: AdminUser, container: ContainerDep
+) -> AutoTraderOut:
+    """Toggle whether this assignment trades the opposite side of every signal."""
+    at = await container.auto_trader_service.set_invert(auto_trader_id, body.invert)
     if at is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Auto-trader not found")
     return AutoTraderOut.from_entity(at)

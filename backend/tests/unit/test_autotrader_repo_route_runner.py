@@ -73,7 +73,7 @@ class FakeAutoTraderService:
     async def list_all(self) -> list[AutoTrader]:
         return list(self.store.values())
 
-    async def create(self, strategy_id, symbol, timeframe, units, params=None, ml_model_id=None):  # type: ignore[no-untyped-def]
+    async def create(self, strategy_id, symbol, timeframe, units, params=None, ml_model_id=None, invert=False):  # type: ignore[no-untyped-def]
         from quantlab.strategies.registry import StrategyRegistry, UnknownStrategyError
 
         if strategy_id not in StrategyRegistry().discover().ids():

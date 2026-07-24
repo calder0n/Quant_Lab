@@ -25,6 +25,9 @@ class AutoTrader:
     # Trained classification model to gate entries on when the strategy's
     # ``use_ml_filter`` param is set; ``None`` disables the ML filter.
     ml_model_id: str | None = None
+    # Trade the opposite side of every signal (buy→sell, sell→buy). For testing
+    # whether a consistently-losing strategy fares better reversed.
+    invert: bool = False
     enabled: bool = False
     # Bookkeeping (updated by the worker on each processed bar):
     last_bucket: int | None = None  # timeframe bucket already acted on (dedup per bar)

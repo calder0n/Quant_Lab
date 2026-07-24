@@ -14,6 +14,7 @@ type AutoTrader = {
   units: number;
   params: Record<string, number | string | boolean>;
   ml_model_id: string | null;
+  invert: boolean;
   realized_pl: number;
   enabled: boolean;
   last_run: string | null;
@@ -102,6 +103,15 @@ export default function AutoTradersPanel() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: !at.enabled }),
+    });
+    refresh();
+  };
+
+  const toggleInvert = async (at: AutoTrader) => {
+    await apiFetch(`/autotraders/${at.id}/invert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invert: !at.invert }),
     });
     refresh();
   };
@@ -211,6 +221,12 @@ export default function AutoTradersPanel() {
                 <th className="px-4 py-3">Market</th>
                 <th className="px-4 py-3 text-right">Units</th>
                 <th className="px-4 py-3">State</th>
+                <th
+                  className="px-4 py-3"
+                  title="Operar al revés: si la estrategia dice comprar, vende (y viceversa)"
+                >
+                  Inversa
+                </th>
                 <th className="px-4 py-3 text-right" title="P/L realizado de las operaciones cerradas de esta estrategia">
                   P&amp;L
                 </th>
@@ -247,6 +263,23 @@ export default function AutoTradersPanel() {
                       }`}
                     >
                       {at.enabled ? "enabled" : "disabled"}
+                    </button>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <button
+                      onClick={() => toggleInvert(at)}
+                      title={
+                        at.invert
+                          ? "Operando al revés — clic para volver a normal"
+                          : "Operar normal — clic para invertir señales"
+                      }
+                      className={`rounded-full border px-2 py-0.5 text-xs ${
+                        at.invert
+                          ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                          : "border-slate-600/40 bg-slate-500/10 text-slate-500"
+                      }`}
+                    >
+                      {at.invert ? "⇄ inversa" : "normal"}
                     </button>
                   </td>
                   <td

@@ -209,6 +209,21 @@ async def test_enable_live_requires_typed_confirmation() -> None:
     assert (await practice_service.set_enabled(True)).enabled
 
 
+async def test_execute_inverts_the_signal_when_requested() -> None:
+    """The same long-entry bar, traded inverted, opens a short instead."""
+    broker = FakeBroker()
+    service, _, _ = build_service(broker, SignalProvider(rising_then_data()))
+    await service.set_enabled(True)
+    report = await service.execute(
+        "ema_cross", Symbol.EURUSD, Timeframe.H1, units=1000, invert=True
+    )
+    assert report.action == "opened_short"  # a long signal, flipped
+    _, units, stop_loss, take_profit, _ = broker.market_orders[0]
+    assert units == -1000  # short units
+    assert stop_loss is not None and take_profit is not None
+    assert stop_loss > take_profit  # short: SL above entry, TP below
+
+
 async def test_execute_opens_long_with_sl_tp_on_entry_signal() -> None:
     broker = FakeBroker()
     service, _, events = build_service(broker, SignalProvider(rising_then_data()))

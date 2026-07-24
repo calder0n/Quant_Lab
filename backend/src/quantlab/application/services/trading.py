@@ -224,6 +224,7 @@ class TradingService:
         data: pd.DataFrame | None = None,
         source: str = "manual",
         ml_model_id: str | None = None,
+        invert: bool = False,
     ) -> ExecutionReport:
         """Evaluate the strategy on broker candles and act on the last closed bar.
 
@@ -253,6 +254,18 @@ class TradingService:
         signals = strategy.generate_signals(data)
         plan = strategy.generate_orders(data, signals)
         last = signals.iloc[-1]
+        if invert:
+            # Trade the opposite of what the strategy says: a long entry becomes a
+            # short (and vice versa), and likewise for exits. SL/TP follow because
+            # the branch that fires decides the direction.
+            last = last.rename(
+                {
+                    "long_entry": "short_entry",
+                    "short_entry": "long_entry",
+                    "long_exit": "short_exit",
+                    "short_exit": "long_exit",
+                }
+            )
         close = float(data["close"].iloc[-1])
         signal_time = str(data.index[-1])
 

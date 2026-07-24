@@ -100,6 +100,7 @@ class FakeTradingService:
         data: pd.DataFrame | None = None,
         source: str = "manual",
         ml_model_id: str | None = None,
+        invert: bool = False,
     ) -> ExecutionReport:
         assert source == "autotrader"  # the worker must label its own executions
         self.calls.append(
