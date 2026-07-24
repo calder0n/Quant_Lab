@@ -124,17 +124,18 @@ class OandaClient:
         result: dict[str, Any] = response.json()
         return result
 
-    async def get_transactions_since(
-        self, account_id: str, since_id: str
-    ) -> dict[str, Any]:
-        """Every transaction after ``since_id`` (plus the current lastTransactionID)."""
+    async def get_trades(self, account_id: str, ids: list[str]) -> list[dict[str, Any]]:
+        """Fetch specific trades by id in any state (open or closed)."""
+        if not ids:
+            return []
         response = await self._http.get(
-            f"/v3/accounts/{account_id}/transactions/sinceid", params={"id": since_id}
+            f"/v3/accounts/{account_id}/trades",
+            params={"ids": ",".join(ids), "state": "ALL"},
         )
         if response.status_code != httpx.codes.OK:
             raise OandaApiError(response.status_code, response.text)
-        result: dict[str, Any] = response.json()
-        return result
+        trades: list[dict[str, Any]] = response.json()["trades"]
+        return trades
 
     async def close_position(
         self, account_id: str, instrument: str, long_units: bool, short_units: bool

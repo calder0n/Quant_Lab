@@ -6,13 +6,6 @@ from quantlab.domain.trading import AccountSummary, BrokerClose, OrderResult, Po
 from quantlab.infrastructure.brokers.oanda.client import OandaClient
 from quantlab.infrastructure.brokers.oanda.market_data import INSTRUMENTS
 
-# Fill reasons for positions the broker closed on its own (not via our close call).
-_BROKER_CLOSE_REASONS = {
-    "TAKE_PROFIT_ORDER",
-    "STOP_LOSS_ORDER",
-    "TRAILING_STOP_LOSS_ORDER",
-}
-
 
 def _format_price(symbol: Symbol, price: float) -> str:
     decimals = 3 if symbol == Symbol.USDJPY else 5
@@ -122,34 +115,35 @@ class OandaExecutionBroker(ExecutionBroker):
             ),
         )
 
-    async def realized_closes_since(self, cursor: str | None) -> tuple[list[BrokerClose], str]:
-        """Broker-side closes (TP/SL/trailing) after ``cursor``, and the new cursor.
+    async def settle_closed_trades(self, open_trade_ids: list[str]) -> list[BrokerClose]:
+        """Of the given (believed-open) trade ids, those OANDA has since closed.
 
-        ``cursor=None`` starts at transaction 0.  The caller still records only
-        closes that match a locally tracked opening trade, but this lets a
-        restarted worker backfill SL/TP/trailing exits that happened while it was
-        offline.
+        Reflects live broker state, so it back-fills SL/TP/trailing exits no
+        matter when they happened (robust to worker restarts). The close reason
+        is inferred from the P/L sign since a trade record doesn't carry it.
         """
-        if cursor is None:
-            cursor = "0"
-
-        raw = await self._client.get_transactions_since(self._account_id, cursor)
-        new_cursor = str(raw.get("lastTransactionID", cursor))
+        trades = await self._client.get_trades(self._account_id, open_trade_ids)
         closes: list[BrokerClose] = []
-        for txn in raw.get("transactions", []):
-            if txn.get("type") != "ORDER_FILL" or txn.get("reason") not in _BROKER_CLOSE_REASONS:
+        for trade in trades:
+            if trade.get("state") != "CLOSED":
                 continue
-            for closed in txn.get("tradesClosed", []):
-                closes.append(
-                    BrokerClose(
-                        trade_id=str(closed["tradeID"]),
-                        transaction_id=str(txn["id"]),
-                        instrument=str(txn.get("instrument", "")),
-                        units=float(closed.get("units", 0.0)),
-                        price=float(txn["price"]) if "price" in txn else None,
-                        realized_pl=float(closed.get("realizedPL", 0.0)),
-                        reason=str(txn["reason"]),
-                        time=str(txn.get("time", "")),
-                    )
+            realized_pl = float(trade.get("realizedPL", 0.0))
+            closing = trade.get("closingTransactionIDs") or [str(trade["id"])]
+            closes.append(
+                BrokerClose(
+                    trade_id=str(trade["id"]),
+                    transaction_id=str(closing[-1]),
+                    instrument=str(trade.get("instrument", "")),
+                    # A close is the opposite side of the opened units.
+                    units=-float(trade.get("initialUnits", 0.0)),
+                    price=(
+                        float(trade["averageClosePrice"])
+                        if "averageClosePrice" in trade
+                        else None
+                    ),
+                    realized_pl=realized_pl,
+                    reason="take_profit" if realized_pl >= 0 else "stop_loss",
+                    time=str(trade.get("closeTime", "")),
                 )
-        return closes, new_cursor
+            )
+        return closes

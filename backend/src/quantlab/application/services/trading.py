@@ -96,9 +96,6 @@ class TradingService:
         self._event_bus = event_bus
         self._trades = trades
         self._ml_artifacts_dir = ml_artifacts_dir
-        # Broker transaction cursor for reconciling server-side closes; primed to
-        # the latest transaction on first use so only closes from then on land.
-        self._txn_cursor: str | None = None
 
     async def status(self) -> TradingStatus:
         async with self._states() as repo:
@@ -158,13 +155,17 @@ class TradingService:
             return await repo.realized_pnl_by_day()
 
     async def reconcile_broker_closes(self) -> int:
-        """Record broker-side closes (TP/SL/trailing) into history.
+        """Fold broker-side closes (TP/SL/trailing) into the local history.
 
-        Positions closed by the broker's own orders never pass through the
-        platform, so their realized P/L is missing from the history. This pulls
-        them from the broker's transaction feed and matches each back to the
-        strategy that opened it (via broker trade id). Idempotent and never
-        raises: a failure just leaves the cursor for a retry next tick.
+        Positions the broker closes on its own never pass through the platform,
+        so their realized P/L is missing. This asks the broker for the *current
+        state* of every open we recorded but haven't yet seen close, and records
+        a close for the ones the broker has since closed — matched back to the
+        strategy that opened them via the broker trade id.
+
+        State-based (not a transaction cursor) so it is robust to worker
+        restarts and back-fills opens that were left dangling. Idempotent (an
+        open with a recorded close is no longer queried) and never raises.
         """
         if self._trades is None:
             return 0
@@ -172,15 +173,17 @@ class TradingService:
             credentials = await self._credentials()
             if not credentials.configured or not credentials.account_id:
                 return 0
+            async with self._trades() as repo:
+                open_ids = await repo.unclosed_open_trade_ids()
+            if not open_ids:
+                return 0
             broker = await self._broker_factory()
-            closes, self._txn_cursor = await broker.realized_closes_since(self._txn_cursor)
+            closes = await broker.settle_closed_trades(open_ids)
             if not closes:
                 return 0
             recorded = 0
             async with self._trades() as repo:
                 for close in closes:
-                    if await repo.exists_with_order_id(close.transaction_id):
-                        continue
                     opened = await repo.open_for_trade_id(close.trade_id)
                     if opened is None:
                         continue  # not a platform-opened trade we can attribute

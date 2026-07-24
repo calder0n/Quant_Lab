@@ -251,8 +251,8 @@ class TradeHistoryRepository(ABC):
         ...
 
     @abstractmethod
-    async def exists_with_order_id(self, order_id: str) -> bool:
-        """Whether a row with this broker ``order_id`` is already recorded (dedup)."""
+    async def unclosed_open_trade_ids(self) -> list[str]:
+        """Broker trade ids of recorded opens that have no recorded close yet."""
         ...
 
 
@@ -308,13 +308,13 @@ class ExecutionBroker(ABC):
     async def close_position(self, symbol: Symbol) -> OrderResult: ...
 
     @abstractmethod
-    async def realized_closes_since(
-        self, cursor: str | None
-    ) -> tuple[list[BrokerClose], str]:
-        """Broker-side closes (TP/SL/trailing) after ``cursor``, and the new cursor.
+    async def settle_closed_trades(self, open_trade_ids: list[str]) -> list[BrokerClose]:
+        """Of the given (believed-open) broker trade ids, those the broker closed.
 
-        ``cursor=None`` primes the cursor to the latest transaction and returns no
-        closes, so reconciliation starts from now rather than backfilling history.
+        Looks up each trade's current state and returns a :class:`BrokerClose`
+        for every one that has since closed (with its realized P/L and close
+        price), so reconciliation can record it against the strategy that opened
+        it. Robust to restarts: it reflects live broker state, not a cursor.
         """
         ...
 

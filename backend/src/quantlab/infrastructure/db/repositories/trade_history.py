@@ -127,8 +127,20 @@ class SqlAlchemyTradeHistoryRepository(TradeHistoryRepository):
         row = result.scalars().first()
         return _to_entity(row) if row is not None else None
 
-    async def exists_with_order_id(self, order_id: str) -> bool:
-        result = await self._session.execute(
-            select(TradeHistoryRecord.id).where(TradeHistoryRecord.order_id == order_id).limit(1)
+    async def unclosed_open_trade_ids(self) -> list[str]:
+        r = TradeHistoryRecord
+        opened = await self._session.execute(
+            select(r.broker_trade_id)
+            .where(r.action.in_(("opened_long", "opened_short")))
+            .where(r.broker_trade_id.is_not(None))
+            .distinct()
         )
-        return result.first() is not None
+        closed = await self._session.execute(
+            select(r.broker_trade_id)
+            .where(r.action == "closed")
+            .where(r.broker_trade_id.is_not(None))
+            .distinct()
+        )
+        open_ids = {row[0] for row in opened.all()}
+        closed_ids = {row[0] for row in closed.all()}
+        return list(open_ids - closed_ids)
