@@ -109,6 +109,13 @@ def test_target_vectors() -> None:
         target_vector(labels, "nope")
 
 
+def test_short_labels_mirror_directional_barriers() -> None:
+    closes = [100.0] * 30 + [100.0, 96.0, 100.0] + [100.0] * 10
+    labels = triple_barrier_labels(crafted_data(closes), horizon=3, sl_atr=2.0, tp_atr=1.0)
+    assert target_vector(labels, "win", direction="short").iloc[30] == 1.0
+    assert target_vector(labels, "win", direction="long").iloc[30] == 0.0
+
+
 def test_horizon_must_be_positive() -> None:
     with pytest.raises(ValueError, match="horizon"):
         triple_barrier_labels(make_market_data(50), horizon=0, sl_atr=1.0, tp_atr=1.0)

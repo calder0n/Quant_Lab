@@ -21,8 +21,10 @@ class EmaCross(Strategy):
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         fast_period = int(self.params["fast_period"])
         slow_period = int(self.params["slow_period"])
-        if fast_period >= slow_period:  # keep the search space smooth for optimizers
-            fast_period, slow_period = min(fast_period, slow_period - 1), slow_period
+        if fast_period >= slow_period:
+            # Invalid combinations are rejected by the optimizer rather than
+            # silently mapped to another parameter set.
+            return self._frame(data)
         fast = ta.ema(data["close"], fast_period)
         slow = ta.ema(data["close"], slow_period)
         up = ta.cross_above(fast, slow)

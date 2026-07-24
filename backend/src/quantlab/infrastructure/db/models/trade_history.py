@@ -21,6 +21,7 @@ class TradeHistoryRecord(Base):
     source: Mapped[str] = mapped_column(String(16), default="manual")
     units: Mapped[float] = mapped_column(Float)
     entry_price: Mapped[float | None] = mapped_column(Float)
+    exit_price: Mapped[float | None] = mapped_column(Float)
     sl_price: Mapped[float | None] = mapped_column(Float)
     tp_price: Mapped[float | None] = mapped_column(Float)
     trailing_distance: Mapped[float | None] = mapped_column(Float)

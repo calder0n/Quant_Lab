@@ -57,9 +57,9 @@ class InMemoryTradingState(TradingStateRepository):
 class FakeBroker(ExecutionBroker):
     def __init__(self, positions: list[Position] | None = None) -> None:
         self.positions = positions or []
-        self.market_orders: list[
-            tuple[Symbol, float, float | None, float | None, float | None]
-        ] = []
+        self.market_orders: list[tuple[Symbol, float, float | None, float | None, float | None]] = (
+            []
+        )
         self.closed: list[Symbol] = []
 
     async def account_summary(self) -> AccountSummary:
@@ -85,9 +85,7 @@ class FakeBroker(ExecutionBroker):
         self.closed.append(symbol)
         return OrderResult(instrument=EUR_USD, units=0.0, filled=True, order_id="43")
 
-    async def realized_closes_since(
-        self, cursor: str | None
-    ) -> tuple[list[BrokerClose], str]:
+    async def realized_closes_since(self, cursor: str | None) -> tuple[list[BrokerClose], str]:
         return [], cursor or "0"
 
 
@@ -293,9 +291,7 @@ async def test_reconcile_records_broker_side_closes_once() -> None:
         )
 
     class ReconBroker(FakeBroker):
-        async def realized_closes_since(
-            self, cursor: str | None
-        ) -> tuple[list[BrokerClose], str]:
+        async def realized_closes_since(self, cursor: str | None) -> tuple[list[BrokerClose], str]:
             if cursor is None:
                 return [], "100"  # prime only
             return [
@@ -474,9 +470,7 @@ async def test_oanda_realized_closes_parses_broker_fills() -> None:
                         "instrument": "XAU_USD",
                         "price": "4100.0",
                         "time": "t1",
-                        "tradesClosed": [
-                            {"tradeID": "T99", "units": "-1", "realizedPL": "12.5"}
-                        ],
+                        "tradesClosed": [{"tradeID": "T99", "units": "-1", "realizedPL": "12.5"}],
                     },
                     {  # our own open — has no close reason, must be ignored
                         "type": "ORDER_FILL",
@@ -492,9 +486,7 @@ async def test_oanda_realized_closes_parses_broker_fills() -> None:
                         "instrument": "EUR_USD",
                         "price": "1.1",
                         "time": "t2",
-                        "tradesClosed": [
-                            {"tradeID": "T50", "units": "1000", "realizedPL": "-8.0"}
-                        ],
+                        "tradesClosed": [{"tradeID": "T50", "units": "1000", "realizedPL": "-8.0"}],
                     },
                 ],
             },
@@ -508,9 +500,11 @@ async def test_oanda_realized_closes_parses_broker_fills() -> None:
     assert tp.trade_id == "T99" and tp.realized_pl == 12.5 and tp.transaction_id == "201"
 
 
-async def test_oanda_realized_closes_primes_cursor_when_none() -> None:
+async def test_oanda_realized_closes_backfills_from_account_start_when_none() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"account": {"lastTransactionID": "300"}})
+        assert request.url.path.endswith("/transactions/sinceid")
+        assert request.url.params["id"] == "0"
+        return httpx.Response(200, json={"lastTransactionID": "300", "transactions": []})
 
     broker = OandaExecutionBroker(oanda_http(handler), "001-1")
     closes, cursor = await broker.realized_closes_since(None)

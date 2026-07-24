@@ -106,6 +106,7 @@ class OandaExecutionBroker(ExecutionBroker):
             self._account_id, instrument, long_units=units > 0, short_units=units < 0
         )
         fill = raw.get("longOrderFillTransaction") or raw.get("shortOrderFillTransaction") or {}
+        closed_trades = fill.get("tradesClosed", [])
         return OrderResult(
             instrument=instrument,
             units=-units,
@@ -114,20 +115,23 @@ class OandaExecutionBroker(ExecutionBroker):
             detail="closed",
             price=float(fill["price"]) if "price" in fill else None,
             realized_pl=float(fill["pl"]) if "pl" in fill else None,
+            trade_id=(
+                str(closed_trades[0]["tradeID"])
+                if closed_trades and closed_trades[0].get("tradeID")
+                else None
+            ),
         )
 
-    async def realized_closes_since(
-        self, cursor: str | None
-    ) -> tuple[list[BrokerClose], str]:
+    async def realized_closes_since(self, cursor: str | None) -> tuple[list[BrokerClose], str]:
         """Broker-side closes (TP/SL/trailing) after ``cursor``, and the new cursor.
 
-        ``cursor=None`` primes the cursor to the account's latest transaction and
-        returns nothing, so only closes from now on are reconciled (no backfill of
-        the entire account history).
+        ``cursor=None`` starts at transaction 0.  The caller still records only
+        closes that match a locally tracked opening trade, but this lets a
+        restarted worker backfill SL/TP/trailing exits that happened while it was
+        offline.
         """
         if cursor is None:
-            summary = await self._client.get_account_summary(self._account_id)
-            return [], str(summary.get("lastTransactionID", "0"))
+            cursor = "0"
 
         raw = await self._client.get_transactions_since(self._account_id, cursor)
         new_cursor = str(raw.get("lastTransactionID", cursor))

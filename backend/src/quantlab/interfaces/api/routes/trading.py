@@ -125,6 +125,7 @@ class TradeRecordOut(BaseModel):
     source: str
     units: float
     entry_price: float | None
+    exit_price: float | None
     sl_price: float | None
     tp_price: float | None
     trailing_distance: float | None
@@ -133,6 +134,7 @@ class TradeRecordOut(BaseModel):
     filled: bool
     detail: str | None
     signal_time: str | None
+    broker_trade_id: str | None
     params: dict[str, ParamValue]
 
     @classmethod
@@ -147,6 +149,7 @@ class TradeRecordOut(BaseModel):
             source=record.source,
             units=record.units,
             entry_price=record.entry_price,
+            exit_price=record.exit_price,
             sl_price=record.sl_price,
             tp_price=record.tp_price,
             trailing_distance=record.trailing_distance,
@@ -155,6 +158,7 @@ class TradeRecordOut(BaseModel):
             filled=record.filled,
             detail=record.detail,
             signal_time=record.signal_time,
+            broker_trade_id=record.broker_trade_id,
             params=record.params,
         )
 
@@ -172,7 +176,8 @@ async def trade_history(
     limit: int = Query(100, ge=1, le=500),
     strategy_id: str | None = Query(None),
 ) -> list[TradeRecordOut]:
-    """Locally recorded executions, newest first, with strategy and exit levels."""
+    """Locally recorded executions, newest first, with reconciled broker exits."""
+    await container.trading_service.reconcile_broker_closes()
     records = await container.trading_service.history(limit=limit, strategy_id=strategy_id)
     return [TradeRecordOut.from_entity(record) for record in records]
 

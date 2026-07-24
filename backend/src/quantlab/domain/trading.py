@@ -81,6 +81,9 @@ class TradeRecord:
     units: float
     source: str = "manual"  # manual | autotrader
     entry_price: float | None = None
+    # Exit fill for a ``closed`` record.  Kept separate from entry_price so a
+    # completed trade can be displayed as one auditable operation.
+    exit_price: float | None = None
     sl_price: float | None = None
     tp_price: float | None = None
     trailing_distance: float | None = None

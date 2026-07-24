@@ -75,6 +75,13 @@ RISK_PARAMS: tuple[ParameterSpec, ...] = (
     # Minimum-volatility filter: skip entries when ATR/price is below the threshold.
     ParameterSpec("use_volatility_filter", "bool", False, group="filter"),
     ParameterSpec("min_atr_pct", "float", 0.0005, 0.0, 0.02, step=0.0001, group="filter"),
+    # Regime filter based on Kaufman's efficiency ratio.  A value near one
+    # describes directional movement; near zero describes a choppy range.  It
+    # gives trend and mean-reversion strategies a causal, common regime gate.
+    ParameterSpec("use_regime_filter", "bool", False, group="filter"),
+    ParameterSpec("regime_period", "int", 40, 10, 300, group="filter"),
+    ParameterSpec("regime", "categorical", "trend", choices=("trend", "range"), group="filter"),
+    ParameterSpec("min_regime_efficiency", "float", 0.35, 0.05, 0.95, step=0.05, group="filter"),
     # ML meta-labeling filter: only enter when a trained model's predicted
     # probability of the trade winning is at least ``ml_threshold``. Which model
     # is used is chosen at execution time (backtest/trade request), not here; the
@@ -182,11 +189,7 @@ class Strategy(ABC):
         intraday bar only sees days that have already closed (no lookahead).
         """
         assert isinstance(data.index, pd.DatetimeIndex)
-        daily = (
-            data.resample("1D")
-            .agg({"high": "max", "low": "min", "close": "last"})
-            .dropna()
-        )
+        daily = data.resample("1D").agg({"high": "max", "low": "min", "close": "last"}).dropna()
         prior_day_atr = ta.atr(daily, int(self.params["atr_period"])).shift(1)
         return prior_day_atr.reindex(data.index, method="ffill")
 
@@ -244,6 +247,9 @@ class Strategy(ABC):
         )
         allowed = self._entries_allowed(data)
         long_ok, short_ok = allowed.copy(), allowed.copy()
+        if bool(self.params["use_ml_filter"]):
+            long_ok &= data.attrs.pop("ml_long_allowed", pd.Series(True, index=data.index))
+            short_ok &= data.attrs.pop("ml_short_allowed", pd.Series(True, index=data.index))
         if bool(self.params["use_trend_filter"]):
             trend = ta.ema(data["close"], int(self.params["trend_ema"]))
             long_ok &= data["close"] > trend
@@ -272,14 +278,40 @@ class Strategy(ABC):
         if bool(self.params["use_volatility_filter"]):
             atr_pct = self.atr(data) / data["close"]
             allowed &= (atr_pct >= float(self.params["min_atr_pct"])).fillna(False)
+        if bool(self.params["use_regime_filter"]):
+            period = int(self.params["regime_period"])
+            # Efficiency = net movement / total movement.  It uses only bars
+            # through t, so enabling it cannot introduce look-ahead bias.
+            net_move = (data["close"] - data["close"].shift(period)).abs()
+            total_move = data["close"].diff().abs().rolling(period).sum()
+            efficiency = (net_move / total_move.replace(0.0, float("nan"))).fillna(0.0)
+            threshold = float(self.params["min_regime_efficiency"])
+            if self.params["regime"] == "trend":
+                allowed &= efficiency >= threshold
+            else:
+                allowed &= efficiency <= threshold
         if bool(self.params["use_ml_filter"]):
             predictor = data.attrs.get("ml_predictor")
             if predictor is not None:
                 # predictor(data) -> P(win) per bar (NaN where features are not
                 # yet available); require it to clear the confidence threshold.
-                win_proba = predictor(data)
                 threshold = float(self.params["ml_threshold"])
-                allowed &= (win_proba >= threshold).reindex(index).fillna(False)
+                win_proba = predictor(data)
+                if isinstance(win_proba, pd.DataFrame):
+                    # Directional models score only the side they were trained
+                    # for.  The unscored side is blocked rather than receiving
+                    # a probability derived from the opposite outcome.
+                    long_score = win_proba.get("long", pd.Series(float("nan"), index=index))
+                    short_score = win_proba.get("short", pd.Series(float("nan"), index=index))
+                    long_allowed = (long_score >= threshold).reindex(index).fillna(False)
+                    short_allowed = (short_score >= threshold).reindex(index).fillna(False)
+                    # ``_entries_allowed`` is symmetric; carry the directional
+                    # mask for ``_frame`` to apply after common filters.
+                    data.attrs["ml_long_allowed"] = long_allowed
+                    data.attrs["ml_short_allowed"] = short_allowed
+                    allowed &= long_allowed | short_allowed
+                else:
+                    allowed &= (win_proba >= threshold).reindex(index).fillna(False)
         return allowed
 
     def chart_overlays(self, data: pd.DataFrame) -> dict[str, pd.Series]:

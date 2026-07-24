@@ -143,9 +143,7 @@ class TradingService:
         )
         return state
 
-    async def history(
-        self, limit: int = 100, strategy_id: str | None = None
-    ) -> list[TradeRecord]:
+    async def history(self, limit: int = 100, strategy_id: str | None = None) -> list[TradeRecord]:
         """Recent executed orders, newest first."""
         if self._trades is None:
             return []
@@ -194,7 +192,7 @@ class TradingService:
                             action="closed",
                             units=close.units,
                             source=opened.source,
-                            entry_price=close.price,
+                            exit_price=close.price,
                             realized_pl=close.realized_pl,
                             order_id=close.transaction_id,
                             filled=True,
@@ -287,7 +285,16 @@ class TradingService:
                     action=entry_action,
                     units=order.units,
                     source=source,
-                    entry_price=order.price if order.price is not None else close,
+                    entry_price=(
+                        (order.price if order.price is not None else close)
+                        if entry_action != "closed"
+                        else None
+                    ),
+                    exit_price=(
+                        (order.price if order.price is not None else close)
+                        if entry_action == "closed"
+                        else None
+                    ),
                     sl_price=sl,
                     tp_price=tp,
                     trailing_distance=trailing_distance if entry_action != "closed" else None,
@@ -309,7 +316,10 @@ class TradingService:
             sl = None if trailing else (close * (1 - sl_pct) if sl_pct else None)
             tp = close * (1 + tp_pct) if tp_pct else None
             opened = await broker.place_market_order(
-                symbol, abs(units), stop_loss=sl, take_profit=tp,
+                symbol,
+                abs(units),
+                stop_loss=sl,
+                take_profit=tp,
                 trailing_distance=trailing_distance,
             )
             orders.append(opened)
@@ -323,7 +333,10 @@ class TradingService:
             sl = None if trailing else (close * (1 + sl_pct) if sl_pct else None)
             tp = close * (1 - tp_pct) if tp_pct else None
             opened = await broker.place_market_order(
-                symbol, -abs(units), stop_loss=sl, take_profit=tp,
+                symbol,
+                -abs(units),
+                stop_loss=sl,
+                take_profit=tp,
                 trailing_distance=trailing_distance,
             )
             orders.append(opened)

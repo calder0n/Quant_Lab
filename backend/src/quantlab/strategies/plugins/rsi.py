@@ -23,6 +23,8 @@ class RsiReversion(Strategy):
         rsi = ta.rsi(data["close"], int(self.params["rsi_period"]))
         oversold = float(self.params["oversold"])
         overbought = float(self.params["overbought"])
+        if oversold >= overbought:
+            return self._frame(data)
         return self._frame(
             data,
             long_entry=ta.cross_above(rsi, pd.Series(oversold, index=data.index)),

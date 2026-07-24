@@ -22,6 +22,8 @@ class BufferedBreakout(Strategy):
     )
 
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
+        if int(self.params["exit_lookback"]) > int(self.params["lookback"]):
+            return self._frame(data)
         buffer = float(self.params["buffer_atr"]) * self.atr(data)
         highest = data["close"].rolling(int(self.params["lookback"])).max().shift(1)
         lowest = data["close"].rolling(int(self.params["lookback"])).min().shift(1)
