@@ -53,17 +53,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Apply DB migrations on startup so a new deploy can never serve against an
+    # out-of-date schema (postgres is already healthy via depends_on).
     command:
-      [
-        "uvicorn",
-        "quantlab.interfaces.api.app:create_app",
-        "--factory",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8000",
-        "--reload",
-      ]
+      - sh
+      - -c
+      - >-
+        alembic upgrade head &&
+        uvicorn quantlab.interfaces.api.app:create_app --factory
+        --host 0.0.0.0 --port 8000 --reload
 
   worker:
     # Same image as the API (built once by the api service): a worker running
